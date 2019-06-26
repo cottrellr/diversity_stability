@@ -1,0 +1,209 @@
+---
+title: "Aquaculture and stability"
+author: "Richard Cottrell"
+date: "24 June 2019"
+output: html_document
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(ggpubr)
+library(ggsci)
+
+```
+
+#production data
+```{r}
+
+#Livestock flags
+#"F" - FAO estimate
+#"" - Official data
+#"Im" - FAO data based on imputation methods
+#"Fc" - Calculated data 
+#"*"  - Unofficial figure
+#"A" - aggregate - may include official, semi-official or estimated or calculated
+#"M" - data not available
+
+
+(complete_livestock_TS <-
+   fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+   filter(Unit=="tonnes" & Element=="Production" & !grepl("indigenous", Item)) %>% 
+   filter(!Area %in% c("Africa" , "Americas", "Asia", "Australia and New Zealand", "Caribbean" ,"Central America", "Central Asia" , "China","Eastern Africa", "Eastern Asia" , "Eastern Europe","Europe","European Union", "Land Locked Developing Countries", "Least Developed Countries" , "Low Income Food Deficit Countries", "Melanesia", "Micronesia", "Middle Africa", "Net Food Importing Developing Countries", "Northern Africa", "Northern America", "Northern Europe", "Oceania", "Small Island Developing States", "South-Eastern Asia", "South America", "Southern Africa" , "Southern Asia", "Southern Europe", "Western Africa","Western Asia","Western Europe", "World" )) %>% 
+   na.omit() %>% 
+   group_by(Area, Year) %>% 
+   summarise(Value= sum(Value)) %>% 
+   ungroup() %>% 
+   group_by(Area) %>% 
+   summarise(TS_length = length(Value)) %>% 
+   filter(TS_length >40)
+        
+)
+
+(data_quality_livestock <-
+   fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+   filter(Unit=="tonnes" & Element=="Production" & !grepl("indigenous", Item)) %>% 
+   filter(Area %in% complete_livestock_TS$Area) %>% 
+   arrange(Area) %>% 
+   group_by(Area, Item) %>% 
+   summarise(Prop_estimate = 1-(length(Flag[Flag %in% c("","Im", "Fc", "*", "A")])/length(Flag))) %>% 
+   ungroup() %>% 
+   group_by(Area) %>% 
+   summarise(Mean_estimate = mean(Prop_estimate)) %>%
+   filter(!(Mean_estimate>0.2 & Area!="China, mainland"))
+)
+
+livestock_countries_include <- data_quality_livestock$Area
+
+
+#Fisheries data
+
+
+#Flags
+## "..." = data unavailable
+## " " = data not separately available
+## "-" = nil or zero
+## "0 0" = more than zero but less than half the unit used
+## F = FAO estimate from available sources of information
+
+
+(complete_fish_ts <- 
+    fread("fisheries_prod_raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Fishing_area = `Fishing area (FAO major fishing area)`,
+           Unit=`Unit (Unit)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country!="Totals") %>%
+    filter(Unit == "Tonnes - live weight") %>%
+    mutate(Estimated = case_when(grepl(" F", Value)~ "Yes",
+                                 TRUE ~ "No")) %>% 
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>% 
+    drop_na() %>% 
+    group_by(Country, Year) %>% 
+    summarise(Value = sum(Value)) %>% 
+    ungroup() %>% 
+    group_by(Country) %>%
+    summarise(Ts_length = length(Value)) %>%
+    filter(Ts_length>60)
+)
+
+
+
+(data_quality_fish <- 
+    fread("fisheries_prod_raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Fishing_area = `Fishing area (FAO major fishing area)`,
+           Unit=`Unit (Unit)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country!="Totals") %>%
+    filter(Unit == "Tonnes - live weight" & Country %in% complete_fish_ts$Country) %>%
+    mutate(Estimated = case_when(grepl(" F", Value)~ "Yes",
+                                 TRUE ~ "No")) %>% 
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>% 
+    drop_na() %>% 
+    group_by(Country, Species) %>% 
+    summarise(Prop_estimate = length(Estimated[Estimated=="Yes"])/length(Estimated)) %>% 
+    ungroup() %>% 
+    group_by(Country) %>% 
+    summarise(Mean_estimated = mean(Prop_estimate)) %>% 
+    filter(!(Mean_estimated>0.2 & Country!="India"))
+)
+
+
+fisheries_countries_include <- data_quality_fish$Country
+
+
+
+
+
+
+#Aquaculture data
+
+
+
+
+
+(complete_ts_aqua <- 
+    fread("aqua-prod-raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Farming_area = `Aquaculture area (FAO major fishing area)`,
+           Environment = `Environment (Environment)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country!="Totals") %>%
+    filter(Unit == "Tonnes - live weight") %>%
+    mutate(Estimated = case_when(grepl(" F", Value)~ "Yes",
+                                 TRUE ~ "No")) %>% 
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>% 
+    drop_na() %>% 
+    group_by(Country, Year) %>% 
+    summarise(Value = sum(Value)) %>% 
+    ungroup() %>% 
+    group_by(Country) %>%
+    summarise(Ts_length = length(Value)) %>% 
+    filter(Ts_length >40)
+)
+
+
+(data_quality_aqua <- 
+    fread("aqua-prod-raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Farming_area = `Aquaculture area (FAO major fishing area)`,
+           Environment = `Environment (Environment)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country!="Totals") %>%
+    filter(Unit == "Tonnes - live weight" & Country %in% complete_ts_aqua$Country) %>%
+    mutate(Estimated = case_when(grepl(" F", Value)~ "Yes",
+                                 TRUE ~ "No")) %>% 
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>% 
+    drop_na() %>% 
+    group_by(Country, Species) %>% 
+    summarise(Prop_estimate = length(Estimated[Estimated=="Yes"])/length(Estimated)) %>% 
+    ungroup() %>% 
+    group_by(Country) %>% 
+    summarise(Mean_estimated = mean(Prop_estimate)) %>% 
+    filter(!(Mean_estimated>0.2 & !Country %in% c("China", "India")))
+    
+)
+
+
+
+
+
+
+
+
+
+unique(data_quality_aqua$Country)
+```
