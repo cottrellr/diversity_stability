@@ -13,7 +13,7 @@ library(ggsci)
 
 ```
 
-#production data
+#screen data for quality (length and estimated proportion)
 ```{r}
 
 #Livestock flags
@@ -25,6 +25,8 @@ library(ggsci)
 #"A" - aggregate - may include official, semi-official or estimated or calculated
 #"M" - data not available
 
+
+#filter which countries have long time series (i.e not russia or belarus etc)
 
 (complete_livestock_TS <-
    fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
@@ -39,6 +41,8 @@ library(ggsci)
    filter(TS_length >40)
         
 )
+
+#OMIT countries where more than 20% of data (average per item/species) is estimated
 
 (data_quality_livestock <-
    fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
@@ -67,6 +71,7 @@ livestock_countries_include <- data_quality_livestock$Area
 ## F = FAO estimate from available sources of information
 
 
+#filter which countries have long time series (i.e not russia or belarus etc)
 (complete_fish_ts <- 
     fread("fisheries_prod_raw.csv", header=TRUE) %>%
     rename(Country = `Country (Country)`,
@@ -96,7 +101,7 @@ livestock_countries_include <- data_quality_livestock$Area
 )
 
 
-
+#OMIT countries where more than 20% of data (average per item/species) is estimated
 (data_quality_fish <- 
     fread("fisheries_prod_raw.csv", header=TRUE) %>%
     rename(Country = `Country (Country)`,
@@ -138,7 +143,7 @@ fisheries_countries_include <- data_quality_fish$Country
 
 
 
-
+#filter which countries have long time series (i.e not russia or belarus etc)
 (complete_ts_aqua <- 
     fread("aqua-prod-raw.csv", header=TRUE) %>%
     rename(Country = `Country (Country)`,
@@ -167,7 +172,7 @@ fisheries_countries_include <- data_quality_fish$Country
     filter(Ts_length >40)
 )
 
-
+#OMIT countries where more than 20% of data (average per item/species) is estimated
 (data_quality_aqua <- 
     fread("aqua-prod-raw.csv", header=TRUE) %>%
     rename(Country = `Country (Country)`,
@@ -198,12 +203,79 @@ fisheries_countries_include <- data_quality_fish$Country
 )
 
 
+aquaculture_countries__include <- data_quality_aqua$Country
+```
+
+#tidy and merge production data  for livestock, fisheries and aquaculture
+
+```{r}
+
+#LIVESTOCK
+
+
+omit_items <- c("Eggs Primary","Beef and Buffalo Meat","Meat, Poultry", "Beeswax", "Sheep and Goat Meat")
+
+(livestock_prod <-
+  fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+  filter(Unit=="tonnes" &
+           Element=="Production" &
+           !Item %in% omit_items &
+           !(grepl("indigenous", Item)|grepl("Total", Item)|grepl("Hides", Item)|grepl("Skins", Item)|grepl("Wool", Item)|grepl("Hair", Item))) %>%
+  filter(Area %in% livestock_countries_include)
+)  
 
 
 
 
 
+#Aquaculture 
 
 
-unique(data_quality_aqua$Country)
+
+#species
+
+spp <- fread("all_spp.csv", header=TRUE) %>% 
+  rename(Species = Name_en)
+
+
+
+(aqua_prod <- 
+    fread("aqua-prod-raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Farming_area = `Aquaculture area (FAO major fishing area)`,
+           Environment = `Environment (Environment)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country!="Totals") %>%
+    filter(Unit == "Tonnes - live weight") %>% 
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>% 
+    filter(Country %in% aquaculture_countries__include) %>% 
+    mutate(Species = case_when(grepl("\\[|\\]", Species) ~ gsub("\\[|\\]","", Species),
+                               TRUE ~ Species)) %>% 
+    na.omit() %>% 
+    left_join(spp, by="Species") %>% 
+    arrange(Country) %>% 
+    select(Country, Species, Environment, Year, Value, Scientific_Name1, Major_Group) %>% 
+    mutate(Scientific_Name1 = case_when(Species == "Hairy marron crayfish"~ "Cherax tenuimanus",
+                                        is.na(Major_Group) ~ Species,
+                                        TRUE~Scientific_Name1)) %>% 
+    rename(Group = Major_Group) %>% 
+    left_join(spp, by="Scientific_Name1") %>%
+    mutate(Group = case_when(is.na(Group)~ Major_Group,
+                             TRUE ~ Group)) %>% 
+    select(Country, Species.x, Environment, Year, Value, Scientific_Name1, Group) %>% 
+    filter(Group!="PLANTAE AQUATICAE")
+  
+)
+
+unique(aqua_prod$Group)
+
+
 ```
