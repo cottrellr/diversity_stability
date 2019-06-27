@@ -390,17 +390,54 @@ total_seafood <-
 #Repeat this for all of the different species that you have. ...
 #Sum all the - (Pi * ln Pi) products to get the value of H.
 
-animal_wo_aqua %>% 
-  group_by(Country, Item_species) %>% 
-  summarise(Species_total = sum(Edible_Value)) %>% 
-  ungroup() %>% 
-  group_by(Country) %>% 
-  nest() %>% 
-  mutate()
-  
+(country_tots <- 
+   animal_wo_aqua %>% 
+   na.omit() %>% 
+   group_by(iso_code) %>% 
+   summarise(Country_total=sum(Edible_Value))
+ 
+)
+
+(national_div_no_aqua <- 
+    animal_wo_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H=sum(Pxln_P))
+)
+
+
+(national_var_no_aqua <- 
+    animal_wo_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total)))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Variance= sd(Prop_change))
+)
+
+(no_aqua_div_var <- 
+  national_div_no_aqua %>% 
+  left_join(national_var_no_aqua, by="iso_code")
+)
+model <- (glm(Variance~H, data=no_aqua_div_var, family = "quasibinomial"))
 
 
 
+ggplot(data = no_aqua_div_var, aes(x=H, y=Variance))+
+  geom_point(colour="blue")+
+  geom_line(aes(y=predict(model, type="response")))+
+  theme_pubr()
 
 
 ```
