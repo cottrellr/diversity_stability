@@ -10,7 +10,7 @@ library(data.table)
 library(tidyverse)
 library(ggpubr)
 library(ggsci)
-
+library(countrycode)
 ```
 
 #screen data for quality (length and estimated proportion)
@@ -45,19 +45,20 @@ library(ggsci)
 #OMIT countries where more than 20% of data (average per item/species) is estimated
 
 (data_quality_livestock <-
-   fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
-   filter(Unit=="tonnes" & Element=="Production" & !grepl("indigenous", Item)) %>% 
-   filter(Area %in% complete_livestock_TS$Area) %>% 
-   arrange(Area) %>% 
-   group_by(Area, Item) %>% 
-   summarise(Prop_estimate = 1-(length(Flag[Flag %in% c("","Im", "Fc", "*", "A")])/length(Flag))) %>% 
-   ungroup() %>% 
-   group_by(Area) %>% 
-   summarise(Mean_estimate = mean(Prop_estimate)) %>%
-   filter(!(Mean_estimate>0.2 & Area!="China, mainland"))
+    fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+    filter(Unit=="tonnes" & Element=="Production" & !grepl("indigenous", Item)) %>% 
+    filter(Area %in% complete_livestock_TS$Area) %>% 
+    arrange(Area) %>%
+    filter(Year>1979) %>% 
+    group_by(Area, Item) %>% 
+    summarise(Prop_estimate = 1-(length(Flag[Flag %in% c("","Im", "Fc", "*", "A")])/length(Flag))) %>% 
+    ungroup() %>% 
+    group_by(Area) %>% 
+    summarise(Mean_estimate = mean(Prop_estimate)) %>%
+    filter(!(Mean_estimate>0.2 & !Area %in% c("China, mainland", "Bangladesh")))
 )
 
-livestock_countries_include <- data_quality_livestock$Area
+(livestock_countries_include <- data_quality_livestock$Area[data_quality_livestock$Area!="Polynesia"])
 
 
 #Fisheries data
@@ -91,7 +92,7 @@ livestock_countries_include <- data_quality_livestock$Area
                                  TRUE ~ "No")) %>% 
     mutate(Value = gsub(" F", "", Value) %>% 
              as.numeric()) %>% 
-    drop_na() %>% 
+    drop_na() %>%
     group_by(Country, Year) %>% 
     summarise(Value = sum(Value)) %>% 
     ungroup() %>% 
@@ -122,6 +123,7 @@ livestock_countries_include <- data_quality_livestock$Area
     mutate(Value = gsub(" F", "", Value) %>% 
              as.numeric()) %>% 
     drop_na() %>% 
+    filter(Year>1979) %>% 
     group_by(Country, Species) %>% 
     summarise(Prop_estimate = length(Estimated[Estimated=="Yes"])/length(Estimated)) %>% 
     ungroup() %>% 
@@ -191,7 +193,8 @@ fisheries_countries_include <- data_quality_fish$Country
     mutate(Estimated = case_when(grepl(" F", Value)~ "Yes",
                                  TRUE ~ "No")) %>% 
     mutate(Value = gsub(" F", "", Value) %>% 
-             as.numeric()) %>% 
+             as.numeric()) %>%
+    filter(Year>1979) %>%
     drop_na() %>% 
     group_by(Country, Species) %>% 
     summarise(Prop_estimate = length(Estimated[Estimated=="Yes"])/length(Estimated)) %>% 
@@ -203,29 +206,12 @@ fisheries_countries_include <- data_quality_fish$Country
 )
 
 
-aquaculture_countries__include <- data_quality_aqua$Country
+(aquaculture_countries__include <- data_quality_aqua$Country)
 ```
 
-#tidy and merge production data  for livestock, fisheries and aquaculture
+#tidy and merge production data for livestock, fisheries and aquaculture
 
 ```{r}
-
-#LIVESTOCK
-
-
-omit_items <- c("Eggs Primary","Beef and Buffalo Meat","Meat, Poultry", "Beeswax", "Sheep and Goat Meat")
-
-(livestock_prod <-
-  fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
-  filter(Unit=="tonnes" &
-           Element=="Production" &
-           !Item %in% omit_items &
-           !(grepl("indigenous", Item)|grepl("Total", Item)|grepl("Hides", Item)|grepl("Skins", Item)|grepl("Wool", Item)|grepl("Hair", Item))) %>%
-  filter(Area %in% livestock_countries_include)
-)  
-
-
-
 
 
 #Aquaculture 
@@ -271,11 +257,150 @@ spp <- fread("all_spp.csv", header=TRUE) %>%
     mutate(Group = case_when(is.na(Group)~ Major_Group,
                              TRUE ~ Group)) %>% 
     select(Country, Species.x, Environment, Year, Value, Scientific_Name1, Group) %>% 
-    filter(Group!="PLANTAE AQUATICAE")
+    filter(!Group %in% c("PLANTAE AQUATICAE")) %>% 
+    filter(Year>1979) %>% 
+    mutate(Edible_Value = case_when(Group == "PISCES" ~Value/1.15, #from Tacon and Metian 2013
+                             Group == "MOLLUSCA" ~ Value/6,
+                             Group =="CRUSTACEA" ~ Value /2.8,
+                             TRUE ~ Value)) %>% 
+    mutate(iso_code = countrycode(Country, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+    rename(Item_species = Species.x) %>% 
+    select(Country, iso_code, Item_species, Year, Value, Edible_Value)
+)
+
+
+
+
+#FISHERIES 
+
+(fisheries_prod <- 
+    fread("fisheries_prod_raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Fishing_area = `Fishing area (FAO major fishing area)`,
+           Unit=`Unit (Unit)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country!="Totals") %>%
+    filter(Unit == "Tonnes - live weight") %>%
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>%
+    filter(Country %in% fisheries_countries_include) %>% 
+    mutate(Species = case_when(grepl("\\[|\\]", Species) ~ gsub("\\[|\\]","", Species),
+                               TRUE ~ Species)) %>% 
+    drop_na() %>%
+    left_join(spp, by="Species") %>% 
+    arrange(Country) %>% 
+    select(Country, Species, Fishing_area, Year, Value, Scientific_Name1, Major_Group) %>% 
+    mutate(Scientific_Name1 = case_when(Species == "Diamondback terrapin"~ "Malaclemys terrapin",
+                                        is.na(Major_Group) ~ Species,
+                                        TRUE~Scientific_Name1)) %>% 
+    rename(Group = Major_Group) %>% 
+    left_join(spp, by="Scientific_Name1") %>%
+    mutate(Group = case_when(is.na(Group) ~ Major_Group,
+                             
+                             TRUE ~ Group)) %>% 
+    select(Country, Species.x, Fishing_area, Year, Value, Scientific_Name1, Group) %>% 
+    mutate(Group = case_when(is.na(Group)~"CRUSTACEA",
+                             TRUE ~ Group)) %>% 
+    filter(!Group %in% c("PLANTAE AQUATICAE")) %>% 
+    filter(Year>1979) %>% 
+    mutate(Edible_Value = case_when(Group == "PISCES" ~Value/1.15, #from Tacon and Metian 2013
+                             Group == "MOLLUSCA" ~ Value/6,
+                             Group =="CRUSTACEA" ~ Value /2.8,
+                             TRUE ~ Value)) %>% 
+    mutate(iso_code = countrycode(Country, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+    drop_na() %>% 
+    rename(Item_species = Species.x) %>% 
+    select(Country, iso_code, Item_species, Year, Value, Edible_Value) %>% 
+    filter(iso_code %in% aqua_prod$iso_code)
   
 )
 
-unique(aqua_prod$Group)
+
+
+
+
+#LIVESTOCK
+
+
+omit_items <- c("Eggs Primary","Beef and Buffalo Meat","Meat, Poultry", "Beeswax", "Sheep and Goat Meat")
+
+(livestock_prod <-
+    fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+    filter(Unit=="tonnes" &
+             Element=="Production" &
+             !Item %in% omit_items &
+             !(grepl("indigenous", Item)|grepl("Total", Item)|grepl("Hides", Item)|grepl("Skins", Item)|grepl("Wool", Item)|grepl("Hair", Item))) %>%
+    filter(Area %in% livestock_countries_include) %>% 
+    mutate(iso_code = countrycode(Area, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+    mutate(iso_code = case_when(Area=="Eswatini" ~ "SWZ",
+                                TRUE ~ iso_code)) %>% 
+    rename(Country=Area,
+           Item_species = Item) %>% 
+    select(Country, iso_code, Item_species, Year, Value) %>% 
+    mutate(Edible_Value = case_when(Item_species=="Snails, not sea"~ Value/6,
+                                    TRUE ~ Value)) %>% 
+    filter(Year>1979)%>% 
+    filter(iso_code %in% aqua_prod$iso_code)
+)  
+
+unique(aqua_prod$iso_code) %in% unique(livestock_prod$iso_code)   
+unique(fisheries_prod$Country)
+unique(livestock_prod$Country)
+
+aqua_prod_adj
+
+
+#readjust aquaculture and fisheries nations included to account for the lowest number of nations (livestock)
+
+aqua_prod_adj <- 
+  aqua_prod %>% 
+  filter(iso_code %in% livestock_prod$iso_code)
+
+fisheries_prod_adj <- 
+  fisheries_prod %>%
+  filter(iso_code %in% livestock_prod$iso_code)
+
+
+animal_wo_aqua <- 
+  bind_rows(livestock_prod, fisheries_prod_adj)
+
+animal_with_aqua <- 
+  bind_rows(livestock_prod, fisheries_prod_adj, aqua_prod_adj) %>% 
+  arrange(iso_code)
+
+total_seafood <- 
+  bind_rows(fisheries_prod_adj, aqua_prod_adj)
+
+
+```
+
+
+#Diversity and stability calculations for 
+```{r}
+
+#Divide the biomass of item_species x in your data by the total biomass of all item_species. ...
+#Multiply the fraction by its natural log (P1 * ln P1)
+#Repeat this for all of the different species that you have. ...
+#Sum all the - (Pi * ln Pi) products to get the value of H.
+
+animal_wo_aqua %>% 
+  group_by(Country, Item_species) %>% 
+  summarise(Species_total = sum(Edible_Value)) %>% 
+  ungroup() %>% 
+  group_by(Country) %>% 
+  nest() %>% 
+  mutate()
+  
+
+
+
 
 
 ```
