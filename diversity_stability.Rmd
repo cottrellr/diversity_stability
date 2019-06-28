@@ -6,6 +6,7 @@ output: html_document
 ---
 
 ```{r}
+library(mgcv)
 library(data.table)
 library(tidyverse)
 library(ggpubr)
@@ -216,8 +217,6 @@ fisheries_countries_include <- data_quality_fish$Country
 
 #Aquaculture 
 
-
-
 #species
 
 spp <- fread("all_spp.csv", header=TRUE) %>% 
@@ -354,7 +353,7 @@ unique(aqua_prod$iso_code) %in% unique(livestock_prod$iso_code)
 unique(fisheries_prod$Country)
 unique(livestock_prod$Country)
 
-aqua_prod_adj
+
 
 
 #readjust aquaculture and fisheries nations included to account for the lowest number of nations (livestock)
@@ -382,13 +381,20 @@ total_seafood <-
 ```
 
 
-#Diversity and stability calculations for 
+#Diversity and stability calculations variance for whole period 1980-2017 
 ```{r}
 
 #Divide the biomass of item_species x in your data by the total biomass of all item_species. ...
 #Multiply the fraction by its natural log (P1 * ln P1)
 #Repeat this for all of the different species that you have. ...
 #Sum all the - (Pi * ln Pi) products to get the value of H.
+
+
+
+#ALL ANIMAL PRODUCTION
+
+
+#Animal production Without aquaculture
 
 (country_tots <- 
    animal_wo_aqua %>% 
@@ -419,6 +425,140 @@ total_seafood <-
     summarise(Annual_total = sum(Edible_Value)) %>% 
     group_by(iso_code) %>% 
     nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~(((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total))))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Stability= 1-sd(Prop_change))
+)
+
+
+
+(no_aqua_div_var <- 
+  national_div_no_aqua %>% 
+  left_join(national_var_no_aqua, by="iso_code")
+)
+
+model_no_aqua <- (glm(Stability~H, data=no_aqua_div_var, family = "quasibinomial"))
+summary(model_no_aqua)
+
+
+no_aqua_plot <- 
+  ggplot(data = no_aqua_div_var, aes(x=H, y=Stability))+
+  geom_point(colour="blue", size=.75)+
+  geom_line(aes(y=predict(model_no_aqua, type="response")))+
+  scale_x_continuous(limits=c(0,4))+
+  #scale_y_continuous(limits = c(0,0.3))+
+  theme_pubr()+ 
+  theme(text=element_text(size=7))+
+  labs(x="Shannon-Weiner Index (H)", y="Production stability", title = "Without aquaculture")
+
+
+
+
+
+
+
+
+
+
+
+
+#Animal production with aquaculture
+
+
+
+(national_div_with_aqua <- 
+    animal_with_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H=sum(Pxln_P))
+)
+
+
+(national_var_with_aqua <- 
+    animal_with_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~(1-((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total))))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Stability= 1-sd(Prop_change))
+)
+
+
+(aqua_div_var <- 
+  national_div_with_aqua %>% 
+  left_join(national_var_with_aqua, by="iso_code")
+)
+
+model_aqua <- (glm(Stability~H, data=aqua_div_var, family = "quasibinomial"))
+summary(model_aqua)
+
+
+
+aqua_plot <- 
+  ggplot(data = aqua_div_var, aes(x=H, y=Stability))+
+  geom_point(colour="blue", size=.75)+
+  geom_line(aes(y=predict(model_aqua, type="response")))+
+  scale_x_continuous(limits=c(0,4))+
+  #scale_y_continuous(limits = c(0,0.3))+
+  theme_pubr() +
+  theme(text=element_text(size=7),
+        axis.title.y = element_blank())+
+  labs(x="Shannon-Weiner Index (H)", title = "With aquaculture")
+
+ggarrange(no_aqua_plot, aqua_plot, nrow = 1, ncol=2, align="hv", labels = c("A", "B"), font.label = list(size=7))+
+  ggsave("Supplementary Figure X.tiff", dpi=600, device="tiff", width=12, height=5, units = "cm")+
+  ggsave("Supplementary Figure X.pdf", dpi=600, device="pdf", width=12, height=5, units = "cm")
+
+
+
+
+#Livestock production and aquaculture
+
+
+(livestock_tots <- 
+    livestock_prod %>% 
+    na.omit() %>% 
+    group_by(iso_code) %>% 
+    summarise(Country_total=sum(Edible_Value))
+)
+
+
+
+
+(livestock_div_no_aqua <- 
+    livestock_prod %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H=sum(Pxln_P))
+)
+
+
+(livestock_var_no_aqua <- 
+    livestock_prod %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
     mutate(Prop_change = purrr::map(data, ~((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total)))) %>% 
     unnest() %>% 
     drop_na() %>% 
@@ -426,18 +566,421 @@ total_seafood <-
     summarise(Variance= sd(Prop_change))
 )
 
+
+
+(livestock_div_var <- 
+  livestock_div_no_aqua %>% 
+  left_join(livestock_var_no_aqua, by="iso_code")
+)
+
+model_livestock <- (glm(Variance~H, data=livestock_div_var %>% filter(iso_code!="FRO"), family = "quasibinomial"))
+summary(model_livestock)
+
+
+livestock_only_plot <- 
+  ggplot(data = livestock_div_var %>% filter(iso_code!="FRO"), aes(x=H, y=Variance))+
+  geom_point(colour="blue", size=.75)+
+  geom_line(aes(y=predict(model_livestock, type="response")))+
+  scale_x_continuous(limits=c(0,4))+
+  #scale_y_continuous(limits = c(0,0.4))+
+  theme_pubr()+ 
+  theme(text=element_text(size=7))+
+  labs(x="Shannon-Weiner Index (H)", y="Production variance", title = "Livestock - no aquaculture")
+
+
+
+
+(livestock_aqua <- 
+  bind_rows(livestock_prod, aqua_prod_adj) %>% 
+    arrange(Country))
+
+
+(livestock_aqua_tots <- 
+    livestock_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code) %>% 
+    summarise(Country_total=sum(Edible_Value))
+)
+
+
+
+
+(livestock_div_with_aqua <- 
+    livestock_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H=sum(Pxln_P))
+)
+
+
+(livestock_var_with_aqua <- 
+    livestock_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total)))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Variance= sd(Prop_change))
+)
+
+
+
+(livestock_aqua_div_var <- 
+  livestock_div_with_aqua %>% 
+  left_join(livestock_var_with_aqua, by="iso_code")
+)
+
+model_livestock_aqua <- (glm(Variance~H, data=livestock_aqua_div_var %>% filter(iso_code!="FRO"), family = "quasibinomial"))
+summary(model_livestock_aqua)
+influence.measures(model_livestock_aqua)
+
+
+livestock_aqua_plot <- 
+  ggplot(data = livestock_aqua_div_var %>% filter(iso_code!="FRO"), aes(x=H, y=Variance))+
+  geom_point(colour="blue", size=.75)+
+  geom_line(aes(y=predict(model_livestock_aqua, type="response")))+
+  scale_x_continuous(limits=c(0,4))+
+  #scale_y_continuous(limits = c(0,0.4))+
+  theme_pubr()+ 
+  theme(text=element_text(size=7))+
+  labs(x="Shannon-Weiner Index (H)", y="Production variance", title = "Livestock with aquaculture")
+
+
+
+ggarrange(livestock_only_plot, livestock_aqua_plot, nrow = 1, ncol=2, align="hv", labels = c("A", "B"), font.label = list(size=7))+
+  ggsave("Supplementary Figure X2.tiff", dpi=600, device="tiff", width=12, height=5, units = "cm")+
+  ggsave("Supplementary Figure X2.pdf", dpi=600, device="pdf", width=12, height=5, units = "cm")
+
+
+
+#Fisheries and aquaculture
+
+
+
+(fisheries_tots <- 
+    fisheries_prod_adj %>% 
+    na.omit() %>% 
+    group_by(iso_code) %>% 
+    summarise(Country_total=sum(Edible_Value))
+)
+
+
+
+
+(fisheries_div_no_aqua <- 
+    fisheries_prod_adj %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H=sum(Pxln_P))
+)
+
+
+(fisheries_var_no_aqua <- 
+    fisheries_prod_adj %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total)))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Variance= sd(Prop_change))
+)
+
+
+
+(fisheries_div_var <- 
+  fisheries_div_no_aqua %>% 
+  left_join(fisheries_var_no_aqua, by="iso_code")
+)
+
+model_fisheries <- (glm(Variance~H, data=fisheries_div_var, family = "quasibinomial"))
+summary(model_fisheries)
+
+
+fisheries_only_plot <- 
+  ggplot(data = fisheries_div_var, aes(x=H, y=Variance))+
+  geom_point(colour="blue", size=.75)+
+  geom_line(aes(y=predict(model_fisheries, type="response")))+
+  scale_x_continuous(limits=c(0,4))+
+  #scale_y_continuous(limits = c(0,0.4))+
+  theme_pubr()+ 
+  theme(text=element_text(size=7))+
+  labs(x="Shannon-Weiner Index (H)", y="Production variance", title = "Fisheries - no aquaculture")
+
+
+
+
+(fisheries_aqua <- 
+  bind_rows(fisheries_prod_adj, aqua_prod_adj) %>% 
+    arrange(Country))
+
+
+(fisheries_aqua_tots <- 
+    fisheries_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code) %>% 
+    summarise(Country_total=sum(Edible_Value))
+)
+
+
+
+
+(fisheries_div_with_aqua <- 
+    fisheries_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H=sum(Pxln_P))
+)
+
+
+(fisheries_var_with_aqua <- 
+    fisheries_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total)))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Variance= sd(Prop_change))
+)
+
+
+
+(fisheries_aqua_div_var <- 
+  fisheries_div_with_aqua %>% 
+  left_join(fisheries_var_with_aqua, by="iso_code")
+)
+
+model_fisheries_aqua <- (glm(Variance~H, data=fisheries_aqua_div_var, family = "quasibinomial"))
+summary(model_fisheries_aqua)
+
+
+
+fisheries_aqua_plot <- 
+  ggplot(data = fisheries_aqua_div_var, aes(x=H, y=Variance))+
+  geom_point(colour="blue", size=.75)+
+  geom_line(aes(y=predict(model_fisheries_aqua, type="response")))+
+  scale_x_continuous(limits=c(0,4))+
+  scale_y_continuous(limits = c(0,0.7))+
+  theme_pubr()+ 
+  theme(text=element_text(size=7))+
+  labs(x="Shannon-Weiner Index (H)", y="Production variance", title = "Fisheries with aquaculture")
+
+
+
+ggarrange(fisheries_only_plot, fisheries_aqua_plot, nrow = 1, ncol=2, align="hv", labels = c("A", "B"), font.label = list(size=7))+
+  ggsave("Supplementary Figure X3.tiff", dpi=600, device="tiff", width=12, height=5, units = "cm")+
+  ggsave("Supplementary Figure X3.pdf", dpi=600, device="pdf", width=12, height=5, units = "cm")
+
+
+
+#Aquaculture only
+(aqua_tots <- 
+    aqua_prod_adj %>% 
+    na.omit() %>% 
+    group_by(iso_code) %>% 
+    summarise(Country_total=sum(Edible_Value))
+)
+
+
+
+
+(aqua_div <- 
+    aqua_prod_adj %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H=sum(Pxln_P))
+)
+
+
+(aqua_var <- 
+    aqua_prod_adj %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total)))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Variance= sd(Prop_change))
+)
+
+
+
+(aqua_div_var <- 
+  aqua_div_no_aqua %>% 
+  left_join(aqua_var_no_aqua, by="iso_code")
+)
+
+model_aqua <- (glm(Variance~H, data=aqua_div_var, family = "quasibinomial"))
+summary(model_aqua)
+
+hist(aqua_div_var$Variance)
+
+
+aqua_only_plot <- 
+  ggplot(data = aqua_div_var, aes(x=H, y=Variance))+
+  geom_point(colour="blue", size=.75)+
+  geom_line(aes(y=predict(model_aqua, type="response")))+
+  scale_x_continuous(limits=c(0,4))+
+  #scale_y_continuous(limits = c(0,0.4))+
+  theme_pubr()+ 
+  theme(text=element_text(size=7))+
+  labs(x="Shannon-Weiner Index (H)", y="Production variance", title = "Aquaculture only")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+
+#Change in country level variance with diversity for whole period 1980-2017
+```{r}
+(country_tots <- 
+   animal_wo_aqua %>% 
+   na.omit() %>% 
+   group_by(iso_code) %>% 
+   summarise(Country_total=sum(Edible_Value))
+ 
+)
+
+(national_div_no_aqua <- 
+    animal_wo_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(H_wo_aqua=sum(Pxln_P))
+)
+
+
+(national_var_no_aqua <- 
+    animal_wo_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~(((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total))))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Stability_wo_aqua= 1-sd(Prop_change))
+)
+
+
+
 (no_aqua_div_var <- 
   national_div_no_aqua %>% 
   left_join(national_var_no_aqua, by="iso_code")
 )
-model <- (glm(Variance~H, data=no_aqua_div_var, family = "quasibinomial"))
+
+##with aqua
+(national_div_with_aqua <- 
+    animal_with_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Item_species) %>% 
+    summarise(Species_total = sum(Edible_Value)) %>% 
+    filter(Species_total != 0) %>% 
+    left_join(country_tots, by="iso_code") %>% 
+    mutate(P=Species_total/Country_total,
+           Pxln_P= -(P*log(P))) %>% 
+    group_by(iso_code) %>% 
+    summarise(Value=sum(Pxln_P))
+)
 
 
+(national_var_with_aqua <- 
+    animal_with_aqua %>% 
+    na.omit() %>% 
+    group_by(iso_code, Year) %>% 
+    summarise(Annual_total = sum(Edible_Value)) %>% 
+    group_by(iso_code) %>% 
+    nest() %>% 
+    mutate(Prop_change = purrr::map(data, ~(1-((.$Annual_total-lag(.$Annual_total))/lag(.$Annual_total))))) %>% 
+    unnest() %>% 
+    drop_na() %>% 
+    group_by(iso_code) %>% 
+    summarise(Value= 1-sd(Prop_change))
+)
 
-ggplot(data = no_aqua_div_var, aes(x=H, y=Variance))+
-  geom_point(colour="blue")+
-  geom_line(aes(y=predict(model, type="response")))+
+
+(aqua_div_var <- 
+  national_div_with_aqua %>% 
+  left_join(national_var_with_aqua, by="iso_code")
+)
+
+(aqua_no_aqua <- 
+  left_join(no_aqua_div_var, aqua_div_var, by="iso_code") %>% 
+    mutate(H_change = H-H_wo_aqua, Stability_change = Stability-Stability_wo_aqua)) 
+
+
+model_aqua_change <- gam(Stability_change~s(H_change), data=aqua_no_aqua)
+
+
+ggplot(data=aqua_no_aqua , 
+       aes(x=reorder(iso_code, Stability_change), y=Stability_change))+
+  geom_bar(stat="identity")+
+  coord_flip()+
   theme_pubr()
+  
+
+
+
 
 
 ```
