@@ -26,7 +26,7 @@ library(magrittr)
 
 #Sentiment analysis - aquaculture
 ```{r}
-#LATEST SEARCH ACROSS ALL SECTORS 21/07/19
+#LATEST SEARCH ACROSS ALL SECTORS 22/07/19
 
 
 #search terms "(aquaculture OR fish farm) <STATE> Australia"
@@ -41,17 +41,18 @@ headlines <-
   html_text("span") %>%
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
 
-lapply(headlines, function{x}
-       
-)
+
+tas_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                            State = "Tasmania", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              }))
+                            )
 
 
-
-
-tas_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Tasmania")
-
-
-#quuensland
+#queensland
 
 queensland <- read_html("https://news.google.com/search?q=(aquaculture%20OR%20fish%20farm)%20queensland%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
@@ -62,7 +63,13 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-qld_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Queensland")
+qld_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                            State = "Queensland", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
@@ -77,7 +84,13 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-SA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "South Australia")
+SA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                           State = "South Australia", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
@@ -92,7 +105,13 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-WA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Western Australia")
+WA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                           State = "Western Australia", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 #NSW
@@ -107,7 +126,13 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-NSW_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "New South Wales")
+NSW_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                            State = "New South Wales", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
@@ -120,7 +145,13 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-VIC_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Victoria")
+VIC_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                            State = "Victoria", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
@@ -134,7 +165,13 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-NT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Northern Territory")
+NT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                           State = "Northern Territory", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 ACT <- read_html("https://news.google.com/search?q=(aquaculture%20OR%20fish%20farm)%20australian%20capital%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
@@ -146,17 +183,20 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-ACT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Australian Capital Territory")
-
+ACT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), 
+                            State = "Australian Capital Territory", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 aquaculture_headlines <- 
   bind_rows(tas_headlines, qld_headlines, SA_headlines, VIC_headlines, NSW_headlines, NT_headlines, WA_headlines, ACT_headlines) %>% 
-  mutate(System = "Aquaculture") %>% 
-  select(System, State, Headline) %>% 
+  mutate(System = "Aquaculture", Sentiment_1="", Sentiment_2="") %>% 
+  select(System, State, Headline, Sentiment_1, Sentiment_2, Metadata) %>% 
   write_csv("Aquaculture headlines.csv")
-
-
 
 
 
@@ -181,12 +221,15 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-tas_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Tasmania")
+tas_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Tasmania", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
-#quuensland
-
-queensland <- read_html("https://news.google.com/search?q=(agriculture)%20queensland%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+queensland <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20queensland%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   queensland %>% 
@@ -195,13 +238,18 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-qld_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Queensland")
+qld_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Queensland", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
 #south australia
 
-SA <- read_html("https://news.google.com/search?q=(agriculture)%20south%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+SA <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20south%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   SA %>% 
@@ -210,13 +258,18 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-SA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "South Australia")
+SA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "South Australia", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
 #Western australia
 
-WA <- read_html("https://news.google.com/search?q=(agriculture)%20western%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+WA <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20western%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   WA %>% 
@@ -225,13 +278,18 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-WA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Western Australia")
+WA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Western Australia", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 #NSW
 
 
-NSW <- read_html("https://news.google.com/search?q=(agriculture)%20new%20south%20wales%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+NSW <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20new%20south%20wales%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   NSW %>% 
@@ -240,11 +298,16 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-NSW_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "New South Wales")
+NSW_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "New South Wales", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
-VIC <- read_html("https://news.google.com/search?q=(agriculture)%20victoria%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+VIC <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20victoria%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   NSW %>% 
@@ -253,12 +316,17 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-VIC_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Victoria")
+VIC_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Victoria", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
 
-NT <- read_html("https://news.google.com/search?q=(agriculture)%20northern%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+NT <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20northern%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   NT %>% 
@@ -267,10 +335,15 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-NT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Northern Territory")
+NT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Northern Territory", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
-ACT <- read_html("https://news.google.com/search?q=(agriculture)%20australian%20capital%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+ACT <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20australian%20capital%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   ACT %>% 
@@ -279,15 +352,21 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-ACT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Australian Capital Territory")
+ACT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Australian Capital Territory", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
-agriculture_headlines <- 
+
+fisheries_headlines <- 
   bind_rows(tas_headlines, qld_headlines, SA_headlines, VIC_headlines, NSW_headlines, NT_headlines, WA_headlines, ACT_headlines) %>% 
-  mutate(System = "Agriculture") %>% 
-  select(System, State, Headline) %>% 
-  write_csv("Agriculture headlines.csv")
+  mutate(System = "Fisheries", Sentiment_1="", Sentiment_2="") %>% 
+  select(System, State, Headline, Sentiment_1, Sentiment_2, Metadata) %>% 
+  write_csv("Fisheries headlines.csv")
 
 
 
@@ -310,12 +389,14 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-tas_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Tasmania")
+tas_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Tasmania", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
-
-#quuensland
-
-queensland <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20queensland%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+queensland <- read_html("https://news.google.com/search?q=(agriculture)%20queensland%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   queensland %>% 
@@ -324,13 +405,18 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-qld_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Queensland")
+qld_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Queensland", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
 #south australia
 
-SA <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20south%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+SA <- read_html("https://news.google.com/search?q=(agriculture)%20south%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   SA %>% 
@@ -339,13 +425,18 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-SA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "South Australia")
+SA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "South Australia", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
 #Western australia
 
-WA <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20western%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+WA <- read_html("https://news.google.com/search?q=(agriculture)%20western%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   WA %>% 
@@ -354,13 +445,18 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-WA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Western Australia")
+WA_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Western Australia", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 #NSW
 
 
-NSW <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20new%20south%20wales%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+NSW <- read_html("https://news.google.com/search?q=(agriculture)%20new%20south%20wales%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   NSW %>% 
@@ -369,11 +465,16 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-NSW_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "New South Wales")
+NSW_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "New South Wales", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
-VIC <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20victoria%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+VIC <- read_html("https://news.google.com/search?q=(agriculture)%20victoria%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   NSW %>% 
@@ -382,12 +483,17 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-VIC_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Victoria")
+VIC_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Victoria", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
 
 
-NT <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20northern%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+NT <- read_html("https://news.google.com/search?q=(agriculture)%20northern%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   NT %>% 
@@ -396,10 +502,15 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-NT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Northern Territory")
+NT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Northern Territory", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
 
 
-ACT <- read_html("https://news.google.com/search?q=(fishing%20or%20fisheries)%20australian%20capital%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
+ACT <- read_html("https://news.google.com/search?q=(agriculture)%20australian%20capital%20territory%20australia&hl=en-AU&gl=AU&ceid=AU%3Aen") 
 
 headlines <- 
   ACT %>% 
@@ -408,18 +519,92 @@ headlines <-
   str_split("(?<=[a-z0-9!?\\.])(?=[A-Z])")
   
 
-ACT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Australian Capital Territory")
+ACT_headlines <- data_frame(Headline = unlist(lapply(headlines, '[[', 1)), State = "Australian Capital Territory", 
+                            Metadata= unlist(lapply(headlines, function(list_element){
+                                length <- length(list_element)
+                                metadata <- paste(list_element[2:length], collapse = "")
+                                return(metadata)
+                              })))
+
+
+#quuensland
 
 
 
-fisheries_headlines <- 
+agriculture_headlines <- 
   bind_rows(tas_headlines, qld_headlines, SA_headlines, VIC_headlines, NSW_headlines, NT_headlines, WA_headlines, ACT_headlines) %>% 
-  mutate(System = "Agriculture") %>% 
-  select(System, State, Headline) %>% 
+  mutate(System = "Agriculture", Sentiment_1="", Sentiment_2="") %>% 
+  select(System, State, Headline, Sentiment_1, Sentiment_2, Metadata) %>% 
   write_csv("Agriculture headlines.csv")
 
 
 ```
+
+
+```{r} 
+
+(food_bal_total <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+   filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+   filter(Area %in% unique(Area)[1:183]) %>%
+   filter(!Area %in% c("China, Hong Kong SAR", "China, Macao SAR", "China, Taiwan Province of")) %>% 
+  filter(Year>2010) %>% 
+   filter(`Item Code`!= 2948) %>% 
+   filter(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Vegetables", "Starchy Roots" , "Sugar & Sweeteners", "Animal fats", "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs")) %>% 
+  group_by(Area, Year) %>% 
+  summarise(Value=sum(Value)) %>% 
+  group_by(Area) %>% 
+  summarise(Total=mean(Value)) %>% 
+  arrange(-Total) %>% 
+  mutate(iso_a3=countrycode(Area, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+  select(-Area))
+
+
+(gdp <- fread("GDP_per_cap.csv", header=TRUE) %>% 
+    rename(Country = `Country Name`) %>% 
+    select(-c(`Indicator Name`, `Indicator Code`, `Country Code`)) %>%
+    mutate(iso_a3 = countrycode(Country, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+    drop_na(iso_a3) %>% 
+    gather(key="Year", value="GDP", -c(Country, iso_a3)) %>% 
+    filter(Year==2013) %>% 
+    drop_na(GDP) %>% 
+    group_by(Country, iso_a3) %>% 
+    summarise(GDP=mean(GDP)) %>% 
+    arrange(-GDP)
+  
+)
+
+(food_bal_animal <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+    filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+    filter(Area %in% unique(Area)[1:183]) %>%
+    filter(!Area %in% c("China, Hong Kong SAR", "China, Macao SAR", "China, Taiwan Province of")) %>% 
+    filter(Year==2013) %>% 
+    filter(`Item Code`!= 2948) %>% 
+    filter(Item %in% c( "Meat")) %>% 
+    group_by(Area, Year) %>% 
+    summarise(Value=sum(Value)) %>% 
+    group_by(Area) %>% 
+    summarise(Value=mean(Value)) %>% 
+    arrange(-Value) %>% 
+    mutate(iso_a3=countrycode(Area, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+    left_join(gdp, by="iso_a3"))
+
+
+
+
+  
+ggplot(food_bal_animal, aes(x=(GDP), y=Value))+
+  geom_point()+
+  theme_pubr()+
+  scale_x_log10()
+
+
+sort(unique(food_bal_total$Item))
+```
+
+
+
+
+
 
 #food production data
 
@@ -428,36 +613,26 @@ fisheries_headlines <-
 
 ### CROPS
 
-Cereals <- c("Barley", "Maize", "Maize, green", "Oats", "Rice, paddy", "Wheat", "Sorghum", "Rye", "Millet", "Grain, mixed", "Cereals, nes")
+# Cereals <- c("Barley", "Maize", "Maize, green", "Oats", "Rice, paddy", "Wheat", "Sorghum", "Rye", "Millet", "Grain, mixed", "Cereals, nes")
+# 
+# Vegetables <- c("Artichokes", "Asparagus", "Cabbages and other brassicas", "Lettuce and chicory", "Spinach", "Cucumbers and gherkins", "Eggplants (aubergines)", "Tomatoes",  "Watermelons", "Melons, other (inc.cantaloupes)", "Pumpkins, squash and gourds", "Carrots and turnips", "Garlic", "Onions, shallots, green", "Leeks, other alliaceous vegetables", "Mushrooms and truffles", "Okra", "Vegetables, leguminous nes", "Vegetables, fresh nes", "String beans")
+# 
+# 
+# Fruits.Nuts<-c("Avocados", "Bananas", "Cranberries", "Plantains", "Dates", "Figs", "Mangoes, mangosteens, guavas", "Papayas", "Pineapples", "Grapefruit (inc. pomelos)",  "Lemons and limes", "Oranges", "Tangerines, mandarins, clementines, satsumas", "Grapes", "Berries nes", "Blueberries", "Gooseberries", "Kiwi fruit","Raspberries","Strawberries", "Apples","Apricots", "Cherries","Cherries, sour", "Peaches and nectarines", "Pears", "Quinces", "Plums and sloes", "Almonds, with shell", "Cashew nuts, with shell","Chestnut", "Hazelnuts, with shell", "Pistachios", "Walnuts, with shell", "Cashewapple", "Areca nuts", "Currants", "Nuts, nes", "Kola nuts", "Fruit, citrus nes", "Fruit, fresh nes",	"Fruit, pome nes"	,	"Fruit, stone nes", "Fruit, tropical fresh nes", "Brazil nuts, with shell", "Bambara beans" , "Karite nuts (sheanuts)")
+# 
+# Oil.crops <- c("Soybeans", "Groundnuts, with shell", "Castor oil seed", "Linseed", "Mustard seed", "Rapeseed" , "Safflower seed","Sesame seed", "Sunflower seed", "Oilseeds nes", "Coconuts" , "Olives", "Oil, palm fruit", "Oil, palm", "Palm kernels")
+# 
+# 
+# Roots.Tubers <- c("Potatoes", "Sweet potatoes" , "Cassava", "Cassava leaves" , "Yams", "Yautia (cocoyam)", "Taro (cocoyam)", "Tung nuts", "Roots and tubers, nes")
+# 
+# Beverage.Spices <- c("Coffee, green", "Tea", "Mat\xe9", "Cocoa, beans", "Anise, badian, fennel, coriander", "Chillies and peppers, dry", "Chillies and peppers, green", "Pepper (piper spp.)", "Nutmeg, mace and cardamoms" , "Cinnamon (canella)","Cloves" , "Ginger", "Vanilla" , "Spices, nes")
+# 
+# Pulses <- c("Beans, dry", "Beans, green", "Broad beans, horse beans, dry", "Chick peas", "Lentils", "Lupins", "Peas, dry" , "Peas, green", "Pigeon peas", "Pulses, nes", "Cow peas, dry")
+# 
+# Sugar.crops <- c("Sugar beet", "Sugar cane", "Sugar crops, nes")
+# 
+# Fibres <- c("Agave fibres nes", "Bastfibres, other",  "Flax fibre and tow"  , "Kapok fibre", "Manila fibre (abaca)",  "Fibre crops nes",   "Jute & Jute-like Fibres", "Cotton lint" ,"Cottonseed", "Seed cotton", "Gums, natural", "Jute")
 
-Vegetables <- c("Artichokes", "Asparagus", "Cabbages and other brassicas", "Lettuce and chicory", "Spinach", "Cucumbers and gherkins", "Eggplants (aubergines)", "Tomatoes",  "Watermelons", "Melons, other (inc.cantaloupes)", "Pumpkins, squash and gourds", "Carrots and turnips", "Garlic", "Onions, shallots, green", "Leeks, other alliaceous vegetables", "Mushrooms and truffles", "Okra", "Vegetables, leguminous nes", "Vegetables, fresh nes", "String beans")
-
-
-Fruits.Nuts<-c("Avocados", "Bananas", "Cranberries", "Plantains", "Dates", "Figs", "Mangoes, mangosteens, guavas", "Papayas", "Pineapples", "Grapefruit (inc. pomelos)",  "Lemons and limes", "Oranges", "Tangerines, mandarins, clementines, satsumas", "Grapes", "Berries nes", "Blueberries", "Gooseberries", "Kiwi fruit","Raspberries","Strawberries", "Apples","Apricots", "Cherries","Cherries, sour", "Peaches and nectarines", "Pears", "Quinces", "Plums and sloes", "Almonds, with shell", "Cashew nuts, with shell","Chestnut", "Hazelnuts, with shell", "Pistachios", "Walnuts, with shell", "Cashewapple", "Areca nuts", "Currants", "Nuts, nes", "Kola nuts", "Fruit, citrus nes", "Fruit, fresh nes",	"Fruit, pome nes"	,	"Fruit, stone nes", "Fruit, tropical fresh nes", "Brazil nuts, with shell", "Bambara beans" , "Karite nuts (sheanuts)")
-
-Oil.crops <- c("Soybeans", "Groundnuts, with shell", "Castor oil seed", "Linseed", "Mustard seed", "Rapeseed" , "Safflower seed","Sesame seed", "Sunflower seed", "Oilseeds nes", "Coconuts" , "Olives", "Oil, palm fruit", "Oil, palm", "Palm kernels")
-
-
-Roots.Tubers <- c("Potatoes", "Sweet potatoes" , "Cassava", "Cassava leaves" , "Yams", "Yautia (cocoyam)", "Taro (cocoyam)", "Tung nuts", "Roots and tubers, nes")
-
-Beverage.Spices <- c("Coffee, green", "Tea", "Mat\xe9", "Cocoa, beans", "Anise, badian, fennel, coriander", "Chillies and peppers, dry", "Chillies and peppers, green", "Pepper (piper spp.)", "Nutmeg, mace and cardamoms" , "Cinnamon (canella)","Cloves" , "Ginger", "Vanilla" , "Spices, nes")
-
-Pulses <- c("Beans, dry", "Beans, green", "Broad beans, horse beans, dry", "Chick peas", "Lentils", "Lupins", "Peas, dry" , "Peas, green", "Pigeon peas", "Pulses, nes", "Cow peas, dry")
-
-Sugar.crops <- c("Sugar beet", "Sugar cane", "Sugar crops, nes")
-
-Fibres <- c("Agave fibres nes", "Bastfibres, other",  "Flax fibre and tow"  , "Kapok fibre", "Manila fibre (abaca)",  "Fibre crops nes",   "Jute & Jute-like Fibres", "Cotton lint" ,"Cottonseed", "Seed cotton", "Gums, natural", "Jute")
-
-
-
-
-
-
-prod <- crops$Value[crops$Item=="Maize"]
-Year <- crops$Year[crops$Item=="Maize"]
-
-model <- gam(prod~s(Year))
-model$residuals/sd(model$residuals)
 
 
 
@@ -838,13 +1013,7 @@ unique(aquaculture$Species)
 ```{r}
 window <- 0.5
 
-(food_bal <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
-   filter(Element %in% c("Food supply (kcal/capita/day)")) %>% 
-   filter(Item %in% c("Rice (Milled Equivalent)")) %>% 
-   filter(Area %in% c("Southern Asia")) %>% 
-   drop_na(Value) %>% 
-   group_by(Year) %>% 
-   summarise(Value= sum(Value))%>% 
+%>% 
    mutate(Residuals = resid(loess(Value~(Year),span=0.25))) %>% 
    mutate(Variance = rollapply(data = Residuals, 
                                width =  round(window*length(Residuals)), 
