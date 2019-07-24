@@ -19,7 +19,7 @@ library(rvest)
 library(stringr)
 library(magrittr)
 library(ggrepel)
-
+library(viridis)
 ```
 
 #Plot of consumption versus GDP
@@ -178,7 +178,7 @@ trends <- ggplot(food_bal_australia, aes(x=Year, y=Relative_value, colour=Item))
     legend.key.size = unit(0.25, "cm"),
     legend.background = element_rect(fill="transparent")
   )+
-  labs(y=bquote(Relative~consumption~capita^-1))+
+  labs(y=bquote(Relative~~Australian~consumption~capita^-1))+
   ggsave("Meat_vs_seafood_trends.tiff", device="tiff", dpi=600, width=8, height=6, units="cm")+
   ggsave("Meat_vs_seafood_trends.pdf", device="pdf", dpi=600, width=8, height=6, units="cm")
 
@@ -197,7 +197,8 @@ ggarrange(consumption_gdp, trends,
           nrow = 2,
           ncol=1,
           font.label = list(size=7), 
-          heights = c(1,0.9))+
+          heights = c(1,0.9),
+          label.y = c(1,1.07))+
   ggsave("Figure - consumption trends.tiff", device="tiff", dpi=600, width = 6, height = 9, units = "cm")+
   ggsave("Figure - consumption trends.pdf", device="pdf", dpi=600, width = 6, height = 9, units = "cm")
 
@@ -235,21 +236,186 @@ ggarrange(consumption_gdp, trends,
 
 
 
+(crops <- 
+   fread("Production_Crops_E_All_Data_(Normalized).csv", header=TRUE) %>% 
+   filter(Element=="Production") %>%
+   filter(Area %in% c("Australia")) %>% 
+   filter(Item %in% unique(Item)[1:87])
+ 
+)
 
-#Sugar cane, Wheat Barley, Seed Cotton, Sorghum, Seed Cotton
+
+(crops_plot <- 
+  crops %>% 
+  drop_na(Value) %>% 
+  group_by(Year) %>% 
+  summarise(Value=sum(Value)) %>% 
+    ggplot(aes(x=Year, y=Value))+
+    geom_line(colour="goldenrod")+
+    geom_line(aes(y=predict(gam(Value~s(Year)))), colour="grey20", size=0.25)+
+    theme_pubr()+
+    theme(
+      text=element_text(size=6)
+    )+
+    labs(y=bquote(Production~(million~tonnes)))+
+    scale_y_continuous(labels = c(20,40,60,80,100))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+    annotate("text", x=0.35, y=0.9, label="Crop production")+
+    ggsave("production_crops.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
+
+)
+
+
+(si_crops_plot_a <- 
+  crops %>% 
+  drop_na(Value) %>% 
+  group_by(Year) %>% 
+  summarise(Value=sum(Value)) %>% 
+  mutate(Residuals = resid(gam(Value~s(Year)))) %>% 
+  mutate(Variance = rollapply(data = Residuals, 
+                                width = round(window*length(Residuals)), 
+                                FUN = sd, 
+                                align = "right", 
+                                fill = NA, 
+                                na.rm = T)) %>% 
+    mutate(AR1 = rollapply(data = Residuals, 
+                           width = round(window*length(Residuals)), 
+                           FUN = function(z,  na.rm = FALSE){
+                             return(acf(z, plot=FALSE)$acf[2])
+                           },  
+                           align = "right", 
+                           fill = NA, 
+                           na.rm = T)) %>% 
+  ggplot(aes(x=Year, y=Variance))+
+    geom_line(colour="goldenrod")+
+    theme_pubr()+
+    theme(
+      text = element_text(size=6)
+    )+
+    labs(y=bquote(Variance~(million~tonnes)))+
+    scale_y_continuous(labels=c("4", "5", "6", "7", "8"), breaks=c(4e+6,5e+6,6e+6,7e+6,8e+6))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+    geom_segment(x=1960, xend=1988, y=5e+6, yend=5e+6, lineend = "butt", arrow=arrow(length = unit(1.5, "mm"), ends = "both", type = "open"))+
+    annotate("text", x=1974, y=5.3e+6, label="Rolling window",size=2)
+  
+)
+
+
+top_crops <- crops %>% drop_na(Value) %>%  filter(Year==2017) %>% arrange(-Value)
+
+
+(si_crops_plot_b <- 
+  crops %>% 
+  filter(Item %in% top_crops$Item[1:10]) %>% 
+    mutate(Item = factor(Item, levels=c(top_crops$Item[1:10]))) %>% 
+  ggplot(aes(x=Year, y=Value, colour=Item))+
+    geom_line()+
+    scale_color_manual(values=(viridis(10)))+
+    scale_y_continuous(labels=c("0", "10", "20", "30", "40"), breaks=c(0,10e+6,20e+6,30e+6,40e+6))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+    labs(y="Production (million tonnes)")+
+    theme_pubr()+
+    theme(
+      text=element_text(size=6),
+      legend.position = "right",
+      legend.box.spacing = unit(0,"cm"),
+      legend.key.size = unit(0.3, "cm"),
+      legend.title = element_blank()
+    )
+)
 
 
 
-window <- 0.36
+ggarrange(si_crops_plot_a,
+          si_crops_plot_b,
+          labels = c("A", "B"),
+          nrow = 1,
+          ncol = 2,
+          widths = c(1,1.4),
+          font.label = list(size=7))+
+  ggsave("Figure - SI crops.tiff", device="tiff", dpi=600, width=12, height=5, units = "cm")
+
+
+```
+
+#livestock industry
+
+```{r}
+
+(livestock <- 
+   bind_rows(
+     meat <-
+       fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Unit=="tonnes" & Element=="Production" & !grepl("indigenous", Item)) %>% 
+       filter(Area %in% c("Australia")) %>%
+       filter(!Item %in% c("Meat, Total", "Milk,Total", "Eggs Primary", "Meat, Poultry", "Sheep and Goat Meat", "Beef and Buffalo Meat")) %>% #totals
+       filter(!Item %in% "Milk, whole fresh cow") %>% 
+       filter(!Item %in% c("Skins, sheep, with wool", "Wool, greasy", "Skins, goat, fresh" ,"Skins, sheep, fresh", "Beeswax", "Hides, cattle, fresh", "Honey, natural")) %>%    #non-food/meat items 
+       group_by(Year) %>% 
+       summarise(Value=sum(Value)) %>% 
+       mutate(Element="Meat"),
+     
+     
+     milk <-
+       fread("Production_LivestockPrimary_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Unit=="tonnes" & Element=="Production" & !grepl("indigenous", Item)) %>% 
+       filter(Area %in% c("Australia")) %>%
+       #filter(!Item %in% c("Meat, Total", "Milk,Total", "Eggs Primary", "Meat, Poultry", "Sheep and Goat Meat", "Beef and Buffalo Meat")) %>% #totals
+       filter(Item %in% c("Milk, whole fresh cow")) %>% 
+       #filter(!Item %in% c("Skins, sheep, with wool", "Wool, greasy", "Skins, goat, fresh" ,"Skins, sheep, fresh", "Beeswax", "Hides, cattle, fresh", "Honey, natural", "Eggs, hen, in shell")) %>%    #non-food/meat items 
+       group_by(Year) %>% 
+       summarise(Value=sum(Value)) %>% 
+       mutate(Element="Milk")
+   ) %>% 
+   group_by(Element) %>% 
+   nest() %>% 
+   mutate(GAM = purrr::map(data, ~(predict(gam(.$Value~s(.$Year)))))) %>% 
+   unnest() %>% 
+   ggplot(aes(x=Year, y=Value, colour=Element))+
+   geom_line()+
+   geom_line(aes(y=GAM, group=Element), colour="grey20", size=0.25)+
+   scale_color_manual(values = c("#56C667FF", "#94D840FF"))+
+   theme_pubr()+
+   theme(
+     text=element_text(size=6),
+     legend.position = c(0.15,0.8),
+     legend.box.spacing = unit(0,"cm"),
+     legend.key.size = unit(0.3, "cm"),
+     legend.title = element_blank()
+   )+
+   labs(y=bquote(Production~(million~tonnes)))+
+   scale_y_continuous(labels = c("0", "3","6","9", "12"), breaks = c(0, 3e+6,6e+6,9e+6, 12e+6), limits = c(0,12e+6))+
+   scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+   ggsave("Production_livestock.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
+
+)
+
+
+
+
+
+unique(meat$Item)
+meat %>% filter(Year==2017) %>% arrange(-Value)
+
+livestock %>% filter(Item=="Milk, whole fresh cow")
+
+
+viridis(20)
+
+```
+
+window <- 0.5
 
 (crops <- 
     fread("Production_Crops_E_All_Data_(Normalized).csv", header=TRUE) %>% 
     filter(Element=="Production") %>%
-    filter(Area %in% c("Australia")) %>%
+    filter(Area %in% c("Australia")) %>% 
+    filter(Item %in% unique(Item)[1:87]) %>% 
+    filter(Item!= "Sugar cane") %>%  
     drop_na(Value) %>% 
     group_by(Year) %>% 
     summarise(Value=sum(Value)) %>% 
-    mutate(Normalized_value = (Value -mean(Value))/sd(Value)) %>% 
+  mutate(Normalized_value = (Value -mean(Value))/sd(Value)) %>% 
     mutate(Element="Crops") %>% 
     mutate(Residuals = resid(gam(Value~s(Year)))) %>% 
     mutate(Variance = rollapply(data = Residuals, 
@@ -258,13 +424,6 @@ window <- 0.36
                                 align = "right", 
                                 fill = NA, 
                                 na.rm = T)) %>% 
-    mutate(Mean = rollapply(data = Residuals, 
-                            width = round(window*length(Residuals)), 
-                            FUN = mean, 
-                            align = "right", 
-                            fill = NA, 
-                            na.rm = T)) %>%
-    mutate(CV=Variance/Mean) %>%
     mutate(AR1 = rollapply(data = Residuals, 
                            width = round(window*length(Residuals)), 
                            FUN = function(z,  na.rm = FALSE){
@@ -301,7 +460,7 @@ window <- 0.36
 
 ggplot(crops, 
        aes(x=Year))+
-  geom_line(aes(y=AR1))+
+  geom_line(aes(y=Return_rate))+
     #annotate("segment", ymin=-Inf, ymax = Inf, xmin = 2002, xmax = 2003, alpha=0.5)
   geom_vline(xintercept = 2003, linetype=2)+theme_pubr()
 
