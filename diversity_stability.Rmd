@@ -6,6 +6,8 @@ output: html_document
 ---
 #LIBRARIES
 ```{r}
+library(grid)
+library(png)
 library(zoo)
 library(Hmisc)
 library(mgcv)
@@ -235,6 +237,9 @@ ggarrange(consumption_gdp, trends,
 # Fibres <- c("Agave fibres nes", "Bastfibres, other",  "Flax fibre and tow"  , "Kapok fibre", "Manila fibre (abaca)",  "Fibre crops nes",   "Jute & Jute-like Fibres", "Cotton lint" ,"Cottonseed", "Seed cotton", "Gums, natural", "Jute")
 
 
+crop_img <- readPNG("crops.png")
+crop_img <- rasterGrob(crop_img)
+
 
 (crops <- 
    fread("Production_Crops_E_All_Data_(Normalized).csv", header=TRUE) %>% 
@@ -249,18 +254,29 @@ ggarrange(consumption_gdp, trends,
   crops %>% 
   drop_na(Value) %>% 
   group_by(Year) %>% 
-  summarise(Value=sum(Value)) %>% 
-    ggplot(aes(x=Year, y=Value))+
-    geom_line(colour="#DCE318FF")+
+  summarise(Value=sum(Value)) %>%
+  mutate(Element="Total crop\nproduction") %>% 
+    ggplot(aes(x=Year, y=Value, colour=Element))+
+    geom_line()+
     geom_line(aes(y=predict(gam(Value~s(Year)))), colour="grey50", size=0.25)+
     theme_pubr()+
     theme(
-      text=element_text(size=6)
+      text=element_text(size=6),
+      legend.background = element_rect(fill="transparent"),
+      legend.position = c(0.18,0.8),
+      legend.direction = "vertical",
+      legend.box.spacing = unit(0,"cm"),
+      legend.key.width = unit(0.4, "cm"),
+      legend.key.height = unit(0.1,"cm"),
+      legend.title = element_blank(),
+      legend.spacing = unit(-0.3, "cm")
     )+
     labs(y=bquote(Biomass~(million~tonnes)))+
+    scale_colour_manual(values ="#DCE318FF")+
     scale_y_continuous(labels = c(40,60,80,100), breaks = c(4e+7,6e+7,8e+7, 10e+7), limits = c(2.5e+7,11e+7))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
-    annotate("text", x=0.35, y=0.9, label="Crop production")+
+    annotate("text", x=1967, y=11e+7, label="Crops", hjust=0, size=2)+
+    annotation_custom(crop_img, xmin = 1958,xmax = 1966, ymin = 10.7e+7, ymax=11.3e+7)+
     ggsave("Production_crops.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
 
 )
@@ -354,6 +370,11 @@ ggarrange(si_crops_plot_a,
 )
 
 
+
+
+cow_img <- readPNG("cow.png")
+cow_img <- rasterGrob(cow_img)
+
 (livestock <- 
     bind_rows(
       meat <-
@@ -417,7 +438,7 @@ ggarrange(si_crops_plot_a,
     theme(
       text=element_text(size=6),
       legend.background = element_rect(fill="transparent"),
-      legend.position = c(0.22,0.85),
+      legend.position = c(0.22,0.765),
       legend.direction = "vertical",
       legend.box.spacing = unit(0,"cm"),
       legend.key.width = unit(0.4, "cm"),
@@ -428,9 +449,11 @@ ggarrange(si_crops_plot_a,
       plot.margin = unit(c(t=0.2, r=0.7, b=0.2, l=0.3), "cm")
     )+
     labs(y=bquote(Biomass~(million~tonnes)))+
-    scale_y_continuous(labels = c("0", "3","6","9", "12"), breaks = c(0, 3e+6,6e+6,9e+6, 12e+6), limits = c(0,12e+6))+
+    scale_y_continuous(labels = c("0", "3","6","9", "12"), breaks = c(0, 3e+6,6e+6,9e+6, 12e+6), limits = c(0,12.5e+6))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
     guides(color = guide_legend(order = 1),linetype = FALSE)+
+    annotate("text", x=1967, y=12.3e+6, label="Livestock", hjust=0, size=2)+
+    annotation_custom(cow_img, xmin = 1958,xmax = 1967, ymin = 11.8e+6, ymax=12.8e+6)+
     
     ggsave("Production_livestock.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
   
@@ -447,6 +470,9 @@ viridis(6)
 #commercial fisheries
 
 ```{r}
+
+fish_img <- readPNG("tuna1.png")
+fish_img <- rasterGrob(fish_img)
 
 (seafood <- 
    bind_rows(
@@ -513,7 +539,7 @@ viridis(6)
    theme(
      text = element_text(size=6),
      legend.background = element_rect(fill="transparent"),
-     legend.position = c(0.22,0.85),
+     legend.position = c(0.22,0.75),
      legend.direction = "vertical",
      legend.box.spacing = unit(0,"cm"),
      legend.key.width = unit(0.4, "cm"),
@@ -523,8 +549,10 @@ viridis(6)
    )+
    scale_color_manual(values=c("#440154FF", "#3B528BFF")) + 
    labs(y=bquote(Biomass~(thousand~tonnes)))+
-   scale_y_continuous(labels = c("0", "50","100","150", "200", "250"), breaks = c(0, 5e+4,10e+4,15e+4, 20e+4, 25e+4), limits = c(0,26e+4))+
+   scale_y_continuous(labels = c("0", "50","100","150", "200", "250"), breaks = c(0, 5e+4,10e+4,15e+4, 20e+4, 25e+4), limits = c(0,27.5e+4))+
    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+   annotate("text", x=1967, y=27.5e+4, label="Fisheries/Seafood", hjust=0, size=2)+
+    annotation_custom(fish_img, xmin = 1958,xmax = 1967, ymin = 25.7e+4, ymax=29.1e+4)+
    ggsave("Production_fish.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
 )
 
@@ -582,7 +610,7 @@ viridis(6)
       text = element_text(size=6),
       legend.background = element_rect(fill="transparent"),
       axis.title.y = element_blank(),
-      legend.position = c(0.32,0.85),
+      legend.position = c(0.32,0.9),
       legend.direction = "vertical",
       legend.box.spacing = unit(0,"cm"),
       legend.key.width = unit(0.4, "cm"),
@@ -596,12 +624,14 @@ viridis(6)
     scale_linetype_manual(values=c(1,1,1))+
     scale_y_continuous(labels = c("0", "200","400","600"), breaks = c(0, 2e+5,4e+5,6e+5), limits = c(0,6.1e+5))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+    annotate("segment",x=2013, xend=2013, y=260e+3, yend=590e+3,  arrow=arrow(length = unit(1, "mm"), ends = "both", type = "open"), size=0.3, colour="grey50")+
+    annotate("text", x=2019, y=410e+3, label="354 217 \nMT",size=1.5)+
     ggsave("Production_seafood.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
 )
 
 
 
-
+fish_consumption$Value[fish_consumption$Year==2013]-aqua_fish_combo$Value[aqua_fish_combo$Year==2013]
 
 
 ```
