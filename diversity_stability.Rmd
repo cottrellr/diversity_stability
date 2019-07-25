@@ -648,6 +648,30 @@ ggarrange(crops_plot, livestock, seafood, seafood_demand_supply,
 
 
 ```
+
+
+#Import dependence
+```{r}
+
+imports <- fread("imports_reexports_aus_seafood.csv", header=TRUE) %>% 
+  filter(!Partner %in% c("World", "Australia")) %>% 
+  rename(iso_a3 = `Partner ISO`, 
+         Value = `Alt Qty Unit`, 
+         Value2 = `Netweight (kg)`) %>% 
+  select(Year, Partner, iso_a3, Value, Value2) %>% 
+  mutate(Value=Value/1000, Value2=Value2/1000) %>% 
+  group_by(Partner, iso_a3) %>% 
+  summarise(Value=mean(Value))
+
+
+sum(imports$Value)
+
+
+
+
+```
+
+
 #EWS-crops
 ```{r}
 window <- 0.5
