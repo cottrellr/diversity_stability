@@ -652,22 +652,47 @@ ggarrange(crops_plot, livestock, seafood, seafood_demand_supply,
 
 #Import dependence
 ```{r}
-
-imports <- fread("imports_reexports_aus_seafood.csv", header=TRUE) %>% 
-  filter(!Partner %in% c("World", "Australia")) %>% 
-  rename(iso_a3 = `Partner ISO`, 
-         Value = `Alt Qty Unit`, 
-         Value2 = `Netweight (kg)`) %>% 
-  select(Year, Partner, iso_a3, Value, Value2) %>% 
-  mutate(Value=Value/1000, Value2=Value2/1000) %>% 
-  group_by(Partner, iso_a3) %>% 
-  summarise(Value=mean(Value))
-
-
-sum(imports$Value)
-
-
-
+(all_seafood_trade <- 
+   bind_rows(
+     fread("imports_reexports_fish_live.csv", header = TRUE),
+     fread("imports_reimports_aquatic_inverts.csv", header = TRUE),
+     fread("imports_reimports_crustaceans_live_1.csv", header = TRUE),
+     fread("imports_reimports_crustaceans_live_2.csv", header = TRUE),
+     fread("imports_reimports_fish_dried_1.csv", header = TRUE),
+     fread("imports_reimports_fish_dried_2.csv", header = TRUE),
+     fread("imports_reimports_fish_fillets_1.csv", header = TRUE),
+     fread("imports_reimports_fish_fillets_2.csv", header = TRUE),
+     fread("imports_reimports_fish_fillets_3.csv", header = TRUE),
+     fread("imports_reimports_fish_fresh_1.csv", header = TRUE),
+     fread("imports_reimports_fish_fresh_2.csv", header = TRUE),
+     fread("imports_reimports_fish_fresh_3.csv", header = TRUE),
+     fread("imports_reimports_fish_frozen_1.csv", header = TRUE),
+     fread("imports_reimports_fish_frozen_2.csv", header = TRUE),
+     fread("imports_reimports_fish_frozen_3.csv", header = TRUE),
+     fread("imports_reimports_fish_frozen_4.csv", header = TRUE),
+     fread("imports_reimports_molluscs_live_1.csv", header = TRUE),
+     fread("imports_reimports_molluscs_live_2.csv", header = TRUE)
+   ) %>% 
+   filter(!Partner %in% c("World", "Australia")) %>% 
+   rename(iso_a3 = `Partner ISO`, 
+          Value=`Alt Qty Unit`,
+          Value2=`Netweight (kg)`,
+          Commodity_code = `Commodity Code`) %>% 
+   select(Year, Partner, Commodity_code, Commodity, Value, Value2, Flag) %>% 
+   filter(nchar(Commodity_code)==5) %>% 
+   #filter(Year==2013) %>% 
+   mutate(Value=Value/1000, Value2= Value2/1000) %>% 
+   arrange(-Year) %>% 
+   group_by(Partner, Commodity) %>% 
+   summarise(Value = mean(Value)) %>% 
+   group_by(Partner) %>% 
+   summarise(Value=sum(Value)) %>% 
+   arrange(-Value) %>% 
+   mutate(Import_dependence = Value/sum(Value))
+)
+  
+all_seafood_trade %>% 
+  select(Partner)
 
 ```
 
