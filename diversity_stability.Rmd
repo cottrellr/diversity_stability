@@ -30,7 +30,7 @@ library(viridis)
 (food_bal_total <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
    filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
    filter(Area %in% unique(Area)[1:183]) %>%
-   filter(!Area %in% c("China, Hong Kong SAR", "China, Macao SAR", "China, Taiwan Province of")) %>% 
+   filter(!Area %in% c("China, Hong Kong SAR", "China, mainland",  "China, Macao SAR", "China, Taiwan Province of")) %>% 
   filter(Year>2010) %>% 
    filter(`Item Code`!= 2948) %>% 
    filter(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables","Vegetable Oils", "Spices", "Starchy Roots" , "Aquatic Plants",  "Offals, Edible", "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs", "Miscellaneous")) %>% 
@@ -77,7 +77,7 @@ library(viridis)
 food_bal_seafood <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
     filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
     filter(Area %in% unique(Area)[1:183]) %>%
-    filter(!Area %in% c("China, Hong Kong SAR", "China, Macao SAR", "China, Taiwan Province of")) %>% 
+    filter(!Area %in% c("China, Hong Kong SAR", "China, mainland", "China, Macao SAR", "China, Taiwan Province of")) %>% 
     filter(Year==2013) %>% 
     filter(`Item Code`!= 2948) %>% 
     filter(Item %in% c("Fish, Seafood")) %>% 
@@ -93,7 +93,7 @@ food_bal_seafood <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", heade
 (food_bal_animal <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
     filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
     filter(Area %in% unique(Area)[1:183]) %>%
-    filter(!Area %in% c("China, Hong Kong SAR", "China, Macao SAR", "China, Taiwan Province of")) %>% 
+    filter(!Area %in% c("China, Hong Kong SAR", "China, mainland", "China, Macao SAR", "China, Taiwan Province of")) %>% 
     filter(Year==2013) %>% 
     filter(`Item Code`!= 2948) %>% 
     filter(Item %in% c( "Meat", "Fish, Seafood")) %>% 
@@ -107,7 +107,8 @@ food_bal_seafood <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", heade
     drop_na() %>% 
     left_join(food_bal_seafood, by=c("Area", "iso_a3")) %>% 
     left_join(food_bal_total, by="iso_a3") %>% 
-    mutate(Prop_total_food = Seafood/Total)
+    mutate(Prop_total_food = Seafood/Total) %>% 
+    distinct()
   
   )
 
@@ -650,8 +651,207 @@ ggarrange(crops_plot, livestock, seafood, seafood_demand_supply,
 ```
 
 
+#EWS for fisheries
+```{r}
+window <- 0.5
+
+(fisheries <- 
+    fread("fisheries_prod_raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Fishing_area = `Fishing area (FAO major fishing area)`,
+           Unit=`Unit (Unit)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country=="Australia") %>%
+    filter(Unit == "Tonnes - live weight") %>% 
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>% 
+    drop_na(Value) %>% 
+    # mutate(Value = case_when(is.na(Value)~0,
+    #                          TRUE ~ Value)) %>% 
+    # filter(!grepl("Inland waters", Fishing_area)) %>% 
+    # left_join(spp, by="Species") %>% 
+    # rename(Group = ISSCAAP_Group) %>%
+    # select(Year, Country, Group, Value) %>% 
+    group_by(Year) %>% 
+    summarise(Value=sum(Value)) %>%
+    mutate(Normalized_value = (Value - mean(Value))/sd(Value)) %>% 
+    mutate(Element="Fisheries") %>% 
+    mutate(Residuals = resid(gam(Value~s(Year)))) %>% 
+    mutate(Variance = rollapply(data = Residuals, 
+                                width = window*length(Residuals), 
+                                FUN = sd, 
+                                align = "right", 
+                                fill = NA, 
+                                na.rm = T)) %>% 
+    mutate(Mean = rollapply(data = Residuals, 
+                            width = window*length(Residuals), 
+                            FUN = mean, 
+                            align = "right", 
+                            fill = NA, 
+                            na.rm = T)) %>%
+    mutate(CV=Variance/Mean) %>%
+    mutate(AR1 = rollapply(data = Residuals, 
+                           width = window*length(Residuals), 
+                           FUN = function(z,  na.rm = FALSE){
+                             return(acf(z, plot=FALSE)$acf[2])
+                           },  
+                           align = "right", 
+                           fill = NA, 
+                           na.rm = T)) %>% 
+    mutate(Return_rate = rollapply(data=Residuals,
+                                   width= window*length(Residuals),
+                                   FUN = function(z, na.rm=FALSE){
+                                     ar1 <- ar.ols(z,demean=FALSE, order.max = 1, aic = FALSE, intercept = FALSE)
+                                     return(return_rate = 1/ar1$ar[1])
+                                   },
+                                   align = "right", 
+                                   fill = NA, 
+                                   na.rm = T)) %>% 
+    mutate(Kurtosis = rollapply(data=Residuals,
+                                   width=window*length(Residuals),
+                                   FUN = moments::kurtosis,
+                                   align = "right", 
+                                   fill = NA, 
+                                   na.rm = T)) %>% 
+    mutate(Skewness = rollapply(data=Residuals,
+                                   width=0.5*length(Residuals),
+                                   FUN = moments::skewness,
+                                   align = "right", 
+                                   fill = NA, 
+                                   na.rm = T))
+)
+
+
+#fishing boat png 
+
+fishing_img <- readPNG("fishingboat.png")
+fishing_img <- rasterGrob(fishing_img)
+
+
+
+(landings <- ggplot(fisheries,
+       aes(x=Year)) +
+  geom_line(aes(y=Value), colour="#440154FF")+
+  geom_line(aes(y=predict(gam(Value~s(Year)))), size=0.5, colour="grey50")+
+    theme_pubr()+
+    theme(
+      text = element_text(size=6),
+      axis.title.x = element_blank(),
+      plot.margin = unit(c(t=0.5, r=0.1,b=0.1,l=0.1), "cm")
+      
+      
+    )+
+    scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.7e+5))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+    labs(y="Fisheries landings (1000s tonnes)")+
+    annotation_custom(fishing_img, xmin = 1950, 1960, ymin = 1.9e+5, ymax=2.9e+5)+
+    annotate("text", x=1960, y=2.4e+5,label="Fisheries\nlandings", hjust=0, size=1.8)+
+    ggsave("EWS_landings.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+
+)
+
+
+(Variance <- ggplot(fisheries,
+       aes(x=Year)) +
+  geom_line(aes(y=Variance), colour="#440154FF")+
+    theme_pubr()+
+    theme(
+      text = element_text(size=6),
+      axis.title.x = element_blank()
+    )+
+    scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+    labs(y="Variance (1000s tonnes)")+
+    annotate("segment", x=1950, xend=1982, y=8e+3, yend=8e+3, lineend = "butt", arrow=arrow(length = unit(1.5, "mm"), ends = "both", type = "open"))+
+    annotate("text", x=1966, y=8.7e+3, label="Rolling window", size=1.8)+
+    ggsave("EWS_variance.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+
+)
+
+(AR1 <- ggplot(fisheries,
+       aes(x=Year)) +
+  geom_line(aes(y=AR1), colour="#440154FF")+
+    theme_pubr()+
+    theme(
+      text = element_text(size=6)
+    )+
+    #scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.55e+5))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+    labs(y="AR1", x="Year")+
+    annotate("segment", x=1950, xend=1982, y=0.05, yend=0.05, lineend = "butt", arrow=arrow(length = unit(1.5, "mm"), ends = "both", type = "open"))+
+    annotate("text", x=1966, y=0.1, label="Rolling window", size=1.8)+
+    ggsave("EWS_AR1.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+
+
+)
+
+length(fisheries$Residuals)*window
+
+
+ggarrange(landings, Variance, AR1, 
+         nrow=3, ncol=1,
+         heights = c(1.15,1,1.1),
+         labels = c("A", "B", "C"),
+         font.label = list(size=7),
+         label.y = c(1, 1.05, 1.05),
+         align = "v")+
+  ggsave("Figure - EWS.tiff", device = "tiff", dpi=600, width = 5.5, height = 11, units = "cm")+
+  ggsave("Figure - EWS.pdf", device = "pdf", dpi=600, width = 5.5, height = 11, units = "cm")
+
+
+```
+
+
+
+
 #Import dependence
 ```{r}
+
+
+(food_bal_total <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+   filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+   filter(Area %in% unique(Area)[1:183]) %>%
+   filter(!Area %in% c("China, Hong Kong SAR", "China, mainland",  "China, Macao SAR", "China, Taiwan Province of")) %>% 
+  filter(Year>2010) %>% 
+   filter(`Item Code`!= 2948) %>% 
+   filter(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables","Vegetable Oils", "Spices", "Starchy Roots" , "Aquatic Plants",  "Offals, Edible", "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs", "Miscellaneous")) %>% 
+  group_by(Area, Year) %>% 
+  summarise(Value=sum(Value)) %>% 
+  group_by(Area) %>% 
+  summarise(Total=mean(Value)) %>% 
+  arrange(-Total) %>% 
+  mutate(iso_a3=countrycode(Area, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+  select(-Area))
+
+
+(food_bal_seafood <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+    filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+    filter(Area %in% unique(Area)[1:183]) %>%
+    filter(!Area %in% c("China, Hong Kong SAR", "China, mainland", "China, Macao SAR", "China, Taiwan Province of")) %>% 
+    filter(Year==2013) %>% 
+    filter(`Item Code`!= 2948) %>% 
+    filter(Item %in% c("Fish, Seafood")) %>% 
+    group_by(Area, Year) %>% 
+    summarise(Value=sum(Value)) %>% 
+    group_by(Area) %>% 
+    summarise(Seafood=mean(Value)) %>% 
+    arrange(-Seafood) %>% 
+    mutate(iso_a3=countrycode(Area, origin="country.name", destination="iso3c", warn=TRUE))
+)
+
+
+
+(SDG_scores <- 
+  fread("SDG_scores.csv", header=TRUE)
+)
+
 (all_seafood_trade <- 
    bind_rows(
      fread("imports_reexports_fish_live.csv", header = TRUE),
@@ -688,11 +888,45 @@ ggarrange(crops_plot, livestock, seafood, seafood_demand_supply,
    group_by(Partner) %>% 
    summarise(Value=sum(Value)) %>% 
    arrange(-Value) %>% 
-   mutate(Import_dependence = Value/sum(Value))
+   mutate(Import_dependence = Value/sum(Value)*100) %>% 
+   mutate(iso_a3 = countrycode(Partner, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+   mutate(iso_a3 = case_when(Partner == "Br. Virgin Isds" ~ "VGB",
+                             Partner == "Curaçao" ~ "CUW",
+                             TRUE ~ iso_a3)) %>% 
+    left_join(SDG_scores, by="iso_a3") %>% 
+    select(Partner, Value, Import_dependence, iso_a3, SDG_14) %>% 
+    arrange(-Import_dependence) %>% 
+    left_join(food_bal_seafood, by="iso_a3") %>% 
+    select(-Area) %>% 
+    left_join(food_bal_total, by="iso_a3") %>% 
+    mutate(Prop_seafood = Seafood/Total) %>% 
+    mutate(SDG_14_relative = SDG_14-54.96458) %>% 
+    mutate(Partner = case_when(Partner=="United Rep. of Tanzania" ~ "Tanzania",
+                               TRUE ~ Partner))
 )
+
+
+
+ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na() , aes(x=reorder(Partner,-Import_dependence), y=Import_dependence))+
+  geom_bar(aes(fill=SDG_14_relative), stat="identity")+
+  theme_pubr()+
+  theme(
+    axis.text.x = element_text(angle=45, hjust = 1),
+    text = element_text(size=9),
+    legend.position = c(0.65,0.9),
+    legend.direction = "horizontal"
+    )+
   
-all_seafood_trade %>% 
-  select(Partner)
+  scale_fill_gradient2(low="firebrick", mid = "grey90",  high="dodgerblue")+
+  labs(y="Seafood import dependence (%)", x="Trade partner", fill="Progress towards SDG 14\nrelative to Australia")+
+  guides(fill = guide_colorbar(ticks = FALSE, barheight = 1, barwidth = 5, units="cm", , title.hjust = 0.5))+
+  ggsave("Figure - progress toward SDG.tiff", device = "tiff", dpi=600, width = 12, height = 10, units = "cm")+
+  ggsave("Figure - progress toward SDG.pdf", device = "pdf", dpi=600, width = 12, height = 10, units = "cm")
+  
+all_seafood_trade
+
+
+sum((all_seafood_trade %>% slice(1:21) %>% drop_na())$Import_dependence)
 
 ```
 
