@@ -1677,6 +1677,13 @@ all_sentiment <- ggarrange(annotate_figure(
 #Impacts across sectors from Hillborn et al 2018
 
 ```{r}
+#PNG figures
+
+
+cow <- readPNG()
+
+
+
 
 Impacts <- 
   fread("Impacts.csv", header=TRUE) %>% 
@@ -1746,14 +1753,16 @@ Impacts <-
   theme_pubr()+
     theme(
       text = element_text(size=8),
+      plot.title = element_text(size=8, hjust=0.5, face="bold"),
       legend.title = element_blank(),
       axis.title.x = element_blank(),
       axis.text.x = element_text(angle=45, hjust=1),
       plot.margin = unit(c(t=0.4, r=-0.1, b=0.55, l=0.3), "cm")
     )+
-    labs(y="Normalised impact")+
+    labs(y="Normalised impact", title="Agriculture")+
     guides(fill=FALSE)+
   scale_fill_manual(values = c("grey50", "goldenrod", "firebrick", "dodgerblue", "black"))+
+
     ggsave("Impacts - agriculture.tiff", device = "tiff", width = 4, height = 5, units = "cm")+
     ggsave("Impacts - agriculture.pdf", device = "pdf", width = 4, height = 5, units = "cm")
 )
@@ -1768,19 +1777,23 @@ Impacts <-
              mutate(Impact=factor(Impact, levels=c("GHG", "Energy use", "Acidification", "Eutrophication", "Combined")))%>% 
              mutate(Source=case_when(Source =="Farmed shrimp" ~ "Shrimp",
                                      TRUE~Source)) %>% 
-             mutate(Source = factor(Source, levels=c("Shrimp", "Salmon", "Molluscs"))),
+             mutate(Source = factor(Source, levels=c("Shrimp", "Salmon", "Molluscs"))) %>% 
+             mutate(Asterisk = case_when(Impact=="Combined" ~ "",
+                                         is.na(SD)~ "*")),
            aes(x=Source, y=Mean, fill=Impact))+
     geom_bar(stat = "identity", position = "dodge")+
     geom_errorbar(aes(ymin=Mean-SD, ymax=Mean+SD), width=0.2, position = position_dodge(0.9), size=0.2)+
+    geom_text(aes(label=Asterisk, y=Mean+0.05),position = position_dodge(0.9), size=2)+
     scale_y_continuous(limits = c(-0.1,2), expand=c(0,0))+
     theme_pubr()+theme(
       text = element_text(size=8),
       legend.title = element_blank(),
       axis.title = element_blank(),
+      plot.title = element_text(size=8, hjust=0.5, face="bold"),
       axis.text.x = element_text(angle=45, hjust=1),
       plot.margin = unit(c(t=0.4, r=-0.2, b=0.55, l=0.25), "cm")
     )+
-    labs(y="Normalised impact")+
+    labs(y="Normalised impact", title="Aquaculture")+
     guides(fill=FALSE)+
     scale_fill_manual(values = c("grey50", "goldenrod", "firebrick", "dodgerblue", "black"))+
     ggsave("Impacts - aquaculture.tiff", device = "tiff", width = 4, height = 5, units = "cm")+
@@ -1788,39 +1801,43 @@ Impacts <-
 )
 
 (FISH_impacts <- 
-  ggplot(data=bind_rows(Impacts %>% 
-                          filter(Sector=="Fisheries") %>% 
-                          group_by(Source, Impact) %>% 
-                          summarise(Mean = mean(Normalised_impact), SD = sd(Normalised_impact)) %>% 
-                          ungroup(),
-                        average_impact_FISH) %>% 
-           mutate(Impact=factor(Impact, levels=c("GHG", "Energy use", "Acidification", "Eutrophication", "Combined")))%>% 
-           mutate(Source=case_when(Source =="Wild shrimp" ~ "Shrimp",
-                                   Source=="Invertebrates"~"Inverts",
-                                   TRUE ~ Source)) %>%
-           mutate(Source = factor(Source, levels=c("Inverts", "Shrimp", "White fish", "Large pelagic", "Small pelagic"))),
-         aes(x=Source, y=Mean, fill=Impact))+
-  geom_bar(stat = "identity", position = "dodge")+
-  geom_errorbar(aes(ymin=Mean-SD, ymax=Mean+SD), width=0.2, position = position_dodge(0.9), size=0.2)+
-  scale_y_continuous(limits = c(-0.1,2), expand=c(0,0))+
-  theme_pubr()+
-  theme(
-    text = element_text(size=8),
-    legend.title = element_blank(),
-    legend.key.size = unit(0.35, "cm"),
-    legend.position = c(0.8, 0.85),
-    axis.title = element_blank(),
-    axis.text.x = element_text(angle=45, hjust=1),
-    plot.margin = unit(c(t=0.4, r=0.2, b=0.2, l=0.2), "cm")
-  )+
-  labs(y="Normalised impact")+
-  
-  scale_fill_manual(values = c("grey50", "goldenrod", "firebrick", "dodgerblue", "black"))+
-  ggsave("Impacts - fisheries.tiff", device = "tiff", width = 5, height = 5, units = "cm")+
-  ggsave("Impacts - fisheries.pdf", device = "pdf", width = 5, height = 5, units = "cm")
+    ggplot(data=bind_rows(Impacts %>% 
+                            filter(Sector=="Fisheries") %>% 
+                            group_by(Source, Impact) %>% 
+                            summarise(Mean = mean(Normalised_impact), SD = sd(Normalised_impact)) %>% 
+                            ungroup(),
+                          average_impact_FISH) %>% 
+             mutate(Impact=factor(Impact, levels=c("GHG", "Energy use", "Acidification", "Eutrophication", "Combined")))%>% 
+             mutate(Source=case_when(Source =="Wild shrimp" ~ "Shrimp",
+                                     Source=="Invertebrates"~"Inverts",
+                                     TRUE ~ Source)) %>%
+             mutate(Source = factor(Source, levels=c("Inverts", "Shrimp", "White fish", "Large pelagic", "Small pelagic"))) %>% 
+             mutate(Asterisk = case_when(Impact=="Combined" ~ "",
+                                         is.na(SD)~ "*")),
+           aes(x=Source, y=Mean, fill=Impact))+
+    geom_bar(stat = "identity", position = "dodge")+
+    geom_errorbar(aes(ymin=Mean-SD, ymax=Mean+SD), width=0.2, position = position_dodge(0.9), size=0.2)+
+    geom_text(aes(label=Asterisk, y=Mean+0.05),position = position_dodge(0.9), size=2)+
+    scale_y_continuous(limits = c(-0.1,2), expand=c(0,0))+
+    theme_pubr()+
+    theme(
+      text = element_text(size=8),
+      plot.title = element_text(size=8, hjust=0.5, face="bold"),
+      legend.title = element_blank(),
+      legend.key.size = unit(0.35, "cm"),
+      legend.position = c(0.8, 0.65),
+      axis.title = element_blank(),
+      axis.text.x = element_text(angle=45, hjust=1),
+      plot.margin = unit(c(t=0.4, r=0.2, b=0.2, l=0.2), "cm")
+    )+
+    labs(y="Normalised impact", title="Fisheries")+
+    
+    scale_fill_manual(values = c("grey50", "goldenrod", "firebrick", "dodgerblue", "black"))+
+    ggsave("Impacts - fisheries.tiff", device = "tiff", width = 5, height = 5, units = "cm")+
+    ggsave("Impacts - fisheries.pdf", device = "pdf", width = 5, height = 5, units = "cm")
 )
 
-impacts_legend <- get_legend(FISH_impacts)
+#impacts_legend <- get_legend(FISH_impacts)
 
 impacts_all <-
   ggarrange(AG_impacts, AQ_impacts, FISH_impacts,
