@@ -136,14 +136,14 @@ consumption_gdp <-
   )+
   labs(y=bquote(Meat~"&"~fish~consumption~(kg~capita^-1~yr^-1)), x=bquote(GDP~capita^-1~(USD~2010~equivalents)))+
   scale_x_log10(breaks = c(1000, 10000, 100000), labels=c("1000", "10000", "100000"))+
-  scale_color_viridis()+
+  scale_color_gradient2(low = "black", mid="lightblue", midpoint = 0.12, high="dodgerblue")+
   geom_line(aes(y=predict(glm(Value~log10(GDP_per_cap), family="quasipoisson"), type="response"))) + 
   geom_text(data=labels, mapping = aes(x=GDP_per_cap, y=Value, label=Area), segment.color = "grey50", point.padding = NA, size=1.5, nudge_x = c(0.1, 0.1,0.1,-0.05,0.1), nudge_y = c(10, 10,10, 10, -14))+
   annotate("segment", x=6e+4, xend = 5e+4, y=128, yend = 136, colour="grey50")+
   guides(colour = guide_colorbar(barwidth = 0.3, barheight = 3, units="cm", ticks = FALSE, title = "Prop. of total food\nsupply from seafood", title.position = "top", title.hjust = 0))+
   
   ggsave("Meat_fish_consumption.tiff", device="tiff", dpi=600, width=8, height=6, units="cm")+
-    ggsave("Meat_fish_consumption.pdf", device="pdf", dpi=600, width=8, height=6, units="cm")
+  ggsave("Meat_fish_consumption.pdf", device="pdf", dpi=600, width=8, height=6, units="cm")
   
   
   
@@ -173,7 +173,7 @@ hist(food_bal_animal$Value)
 trends <- ggplot(food_bal_australia, aes(x=Year, y=Relative_value, colour=Item))+
   geom_line(size=0.6)+
   theme_pubr()+
-  scale_color_manual(values = c( "#440154FF", "#56C667FF")) +
+  scale_color_manual(values = c( "dodgerblue","grey20")) +#"#440154FF" "#56C667FF"
   theme(
     text = element_text(size=5),
     legend.position= c(0.2,0.85),
@@ -197,7 +197,7 @@ trends <- ggplot(food_bal_australia, aes(x=Year, y=Relative_value, colour=Item))
 
 ```{r}
 ggarrange(consumption_gdp, trends,
-          labels=c("A", "B"),
+          labels=c("a", "b"),
           nrow = 2,
           ncol=1,
           font.label = list(size=7), 
@@ -274,7 +274,7 @@ crop_img <- rasterGrob(crop_img)
       legend.spacing = unit(-0.3, "cm")
     )+
     labs(y=bquote(Biomass~(million~tonnes)))+
-    scale_colour_manual(values ="#DCE318FF")+
+    scale_colour_manual(values ="goldenrod")+ #"#DCE318FF"
     scale_y_continuous(labels = c(40,60,80,100), breaks = c(4e+7,6e+7,8e+7, 10e+7), limits = c(2.5e+7,11e+7))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
     annotate("text", x=1967, y=11e+7, label="Crops", hjust=0, size=2)+
@@ -434,7 +434,7 @@ cow_img <- rasterGrob(cow_img)
     ggplot(aes(x=Year, y=Value, colour=Element))+
     geom_line(size=0.5)+
     geom_line(aes(y=GAM, group=Feature), colour="grey50", size=0.25)+
-    scale_color_manual(values = rev(c("#2A788EFF" ,"#22A884FF", "#7AD151FF")))+
+    scale_color_manual(values = c("grey70", "grey50", "grey30" ))+ #rev(c("#2A788EFF" ,"#22A884FF", "#7AD151FF"))
     #scale_linetype_manual(values = c(1,1))+
     theme_pubr()+
     theme(
@@ -469,7 +469,7 @@ viridis(6)
 
 ```
 
-#commercial fisheries
+#commercial fisheries + aquaculture
 
 ```{r}
 
@@ -549,7 +549,7 @@ fish_img <- rasterGrob(fish_img)
      legend.title = element_blank(),
      legend.spacing = unit(-0.3, "cm")
    )+
-   scale_color_manual(values=c("#440154FF", "#3B528BFF")) + 
+   scale_color_manual(values=c("dodgerblue", "dodgerblue4")) + 
    labs(y=bquote(Biomass~(thousand~tonnes)))+
    scale_y_continuous(labels = c("0", "50","100","150", "200", "250"), breaks = c(0, 5e+4,10e+4,15e+4, 20e+4, 25e+4), limits = c(0,27.5e+4))+
    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
@@ -622,7 +622,7 @@ fish_img <- rasterGrob(fish_img)
       plot.margin = unit(c(t=0.2, r=0.7, b=0.2, l=0.2), "cm")
     )+
     labs(y="Biomass (thousand tonnes)")+
-    scale_color_manual(values = c("black" , "#3B528BFF","#440154FF"))+
+    scale_color_manual(values = c("firebrick" , "dodgerblue4","dodgerblue"))+
     scale_linetype_manual(values=c(1,1,1))+
     scale_y_continuous(labels = c("0", "200","400","600"), breaks = c(0, 2e+5,4e+5,6e+5), limits = c(0,6.1e+5))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
@@ -642,7 +642,7 @@ fish_consumption$Value[fish_consumption$Year==2013]-aqua_fish_combo$Value[aqua_f
 ```{r}
 
 ggarrange(crops_plot, livestock, seafood, seafood_demand_supply,
-          labels = c("A", "B", "C", "D"),
+          labels = c("a", "b", "c", "d"),
           font.label = list(size=7))+
   ggsave("Figure - production trends.tiff", device="tiff", dpi=600, width = 12, height = 10, units="cm")+
   ggsave("Figure - production trends.pdf", device="pdf", dpi=600, width = 12, height = 10, units="cm")
@@ -846,10 +846,34 @@ ggarrange(landings, Variance, AR1,
 )
 
 
-
+#progress towards SDG 14 data 
 (SDG_scores <- 
   fread("SDG_scores.csv", header=TRUE)
 )
+
+
+#proportion of catch from IUU - doesn't really work
+
+bind_rows(fread("NonIndustrial_watson.csv", header=TRUE), fread("Industrial-watson.csv", header=TRUE)) %>% 
+  group_by(`FAO name`, IYear) %>% 
+  summarise(Reported=sum(Reported), IUU = sum(IUU)) %>% 
+  mutate(Prop_IUU = IUU/(IUU+Reported)) %>% 
+  filter(IYear >2012) %>% 
+  group_by(`FAO name`) %>% 
+  summarise(Prop_IUU_mean = mean(Prop_IUU)) %>% 
+  mutate(iso_a3 = countrycode(`FAO name`, origin="country.name", destination="iso3c", warn=TRUE))
+
+
+(corruption <- 
+    fread("corruption.csv", header=TRUE) %>% 
+    gather(key="Year", value="CPI", -c(Country, iso_a3)) %>% 
+    drop_na(CPI) %>% 
+    group_by(iso_a3) %>% 
+    summarise(CPI=mean(CPI))) 
+  
+
+
+#all seafood
 
 (all_seafood_trade <- 
    bind_rows(
@@ -893,13 +917,15 @@ ggarrange(landings, Variance, AR1,
                              Partner == "Curaçao" ~ "CUW",
                              TRUE ~ iso_a3)) %>% 
     left_join(SDG_scores, by="iso_a3") %>% 
-    select(Partner, Value, Import_dependence, iso_a3, SDG_14) %>% 
+    left_join(corruption, by="iso_a3") %>% 
+    select(Partner, Value, Import_dependence, iso_a3, SDG_14, CPI) %>% 
     arrange(-Import_dependence) %>% 
-    left_join(food_bal_seafood, by="iso_a3") %>% 
-    select(-Area) %>% 
-    left_join(food_bal_total, by="iso_a3") %>% 
-    mutate(Prop_seafood = Seafood/Total) %>% 
+    left_join(food_bal_seafood, by="iso_a3") %>%
+    select(-Area) %>%
+    left_join(food_bal_total, by="iso_a3") %>%
+    mutate(Prop_seafood = Seafood/Total) %>%
     mutate(SDG_14_relative = SDG_14-54.96458) %>% 
+    mutate(CPI_relative = CPI-78.833333) %>% 
     mutate(Partner = case_when(Partner=="United Rep. of Tanzania" ~ "Tanzania",
                                TRUE ~ Partner))
 )
@@ -909,8 +935,7 @@ sdg14 <- readPNG("SDG14.png")
 sdg14 <- rasterGrob(sdg14)
 
 
-
-ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na() , aes(x=reorder(Partner,-Import_dependence), y=Import_dependence))+
+ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na() , aes(x=reorder(Partner, -Import_dependence), y=Import_dependence))+
   geom_bar(aes(fill=SDG_14_relative), stat="identity")+
   theme_pubr()+
   theme(
@@ -920,15 +945,25 @@ ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na() , aes(x=reorder(Part
     legend.direction = "horizontal",
     legend.background = element_rect(fill="transparent")
     )+
-  
+
   scale_fill_gradient2(low="firebrick", mid = "grey90",  high="dodgerblue")+
-  
+
   labs(y="Prop. seafood imports by weight (%)", x="Trade partner", fill="Progress towards SDG 14\nrelative to Australia")+
-  guides(fill = guide_colorbar(ticks = FALSE, barheight = 1, barwidth = 5, units="cm", , title.hjust = 0.5))+
+  guides(fill = guide_colorbar(ticks = FALSE, barheight = 1, barwidth = 5, units="cm",  title.hjust = 0.5))+
   annotation_custom(sdg14, xmin = 18, xmax = 20, ymin = 17, ymax = 21)+
   ggsave("Figure - progress toward SDG.tiff", device = "tiff", dpi=600, width = 12, height = 10, units = "cm")+
   ggsave("Figure - progress toward SDG.pdf", device = "pdf", dpi=600, width = 12, height = 10, units = "cm")
-  
+
+
+ggplot(data=all_seafood_trade %>% slice(1:31), 
+       aes(x=CPI_relative, y=SDG_14_relative))+
+  geom_point(aes(size=Import_dependence)) + 
+  geom_vline(xintercept=0, linetype=2, colour="grey70")+
+  geom_hline(yintercept=0, linetype=2, colour="grey70")+
+  theme_pubr()
+
+
+
 all_seafood_trade
 
 
@@ -1661,6 +1696,9 @@ sentiment_legend <- get_legend(aquaculture_sentiment)
 all_sentiment <- ggarrange(annotate_figure(
     ggarrange(AG_sentiment, aquaculture_sentiment, fisheries_sentiment,
               legend = FALSE,
+              labels=c("d", "e", "f"),
+              font.label = list(size=9),
+              label.x=c(0, -0.05, -0.07),
               nrow = 1,
               ncol = 3),
     bottom =  text_grob("Proportion of news headlines", size = 8)),
@@ -1680,10 +1718,35 @@ all_sentiment <- ggarrange(annotate_figure(
 #PNG figures
 
 
-cow <- readPNG()
+cow <- readPNG("cow.png")
+cow <- rasterGrob(cow)
 
+pig <- readPNG("pig.png")
+pig <- rasterGrob(pig)
 
+hen <- readPNG("henedit.png")
+hen <- rasterGrob(hen)
 
+shrimp <- readPNG("shrimp.png")
+shrimp <- rasterGrob(shrimp)
+
+salmon <- readPNG("salmon.png")
+salmon <- rasterGrob(salmon)
+
+mollusc <- readPNG("oyster.png")
+mollusc <- rasterGrob(mollusc)
+
+lobster <- readPNG("lobster.png")
+lobster <- rasterGrob(lobster)
+
+flathead <- readPNG("flattie.png")
+flathead <- rasterGrob(flathead)
+
+tuna <- readPNG("tuna2.png")
+tuna <- rasterGrob(tuna)
+
+anchovy <- readPNG("anchovy.png")
+anchovy <- rasterGrob(anchovy)
 
 Impacts <- 
   fread("Impacts.csv", header=TRUE) %>% 
@@ -1762,6 +1825,9 @@ Impacts <-
     labs(y="Normalised impact", title="Agriculture")+
     guides(fill=FALSE)+
   scale_fill_manual(values = c("grey50", "goldenrod", "firebrick", "dodgerblue", "black"))+
+    annotation_custom(cow, xmin=0.55, xmax=1.15, ymin=1.3, ymax=1.55)+
+     annotation_custom(pig, xmin=1.65, xmax=2.15, ymin=0.7, ymax=0.95)+
+    annotation_custom(hen, xmin=2.5, xmax=3.5, ymin=0.4, ymax=0.6)+
 
     ggsave("Impacts - agriculture.tiff", device = "tiff", width = 4, height = 5, units = "cm")+
     ggsave("Impacts - agriculture.pdf", device = "pdf", width = 4, height = 5, units = "cm")
@@ -1796,6 +1862,10 @@ Impacts <-
     labs(y="Normalised impact", title="Aquaculture")+
     guides(fill=FALSE)+
     scale_fill_manual(values = c("grey50", "goldenrod", "firebrick", "dodgerblue", "black"))+
+    annotation_custom(shrimp, xmin=0.5, xmax=1, ymin=1, ymax=1.3)+
+     annotation_custom(salmon, xmin=1.6, xmax=2.2, ymin=0.4, ymax=0.65)+
+    annotation_custom(mollusc, xmin=2.7, xmax=3.1, ymin=0.25, ymax=0.4)+
+
     ggsave("Impacts - aquaculture.tiff", device = "tiff", width = 4, height = 5, units = "cm")+
     ggsave("Impacts - aquaculture.pdf", device = "pdf", width = 4, height = 5, units = "cm")
 )
@@ -1825,13 +1895,18 @@ Impacts <-
       plot.title = element_text(size=8, hjust=0.5, face="bold"),
       legend.title = element_blank(),
       legend.key.size = unit(0.35, "cm"),
+      legend.background = element_rect(fill="transparent"),
       legend.position = c(0.8, 0.65),
       axis.title = element_blank(),
       axis.text.x = element_text(angle=45, hjust=1),
       plot.margin = unit(c(t=0.4, r=0.2, b=0.2, l=0.2), "cm")
     )+
     labs(y="Normalised impact", title="Fisheries")+
-    
+    annotation_custom(lobster, xmin=0.6, xmax=1.2, ymin=1.6, ymax=1.9)+
+    annotation_custom(shrimp, xmin=1.6, xmax=2.2, ymin=0.9, ymax=1.2)+
+    annotation_custom(flathead, xmin=2.6, xmax=3.2, ymin=0.15, ymax=0.5)+
+    annotation_custom(tuna, xmin=3.5, xmax=4.3, ymin=0.1, ymax=0.5)+
+    annotation_custom(anchovy, xmin=4.6, xmax=5.2, ymin=0.05, ymax=0.3)+
     scale_fill_manual(values = c("grey50", "goldenrod", "firebrick", "dodgerblue", "black"))+
     ggsave("Impacts - fisheries.tiff", device = "tiff", width = 5, height = 5, units = "cm")+
     ggsave("Impacts - fisheries.pdf", device = "pdf", width = 5, height = 5, units = "cm")
@@ -1842,7 +1917,8 @@ Impacts <-
 impacts_all <-
   ggarrange(AG_impacts, AQ_impacts, FISH_impacts,
           widths = c(1, 1, 1.2),
-          
+          labels=c("a", "b", "c"),
+          font.label = list(size=9),
           align = "v",
           nrow = 1,
           ncol = 3)+
