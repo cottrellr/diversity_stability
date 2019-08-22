@@ -140,14 +140,17 @@ consumption_gdp <-
   geom_line(aes(y=predict(glm(Value~log10(GDP_per_cap), family="quasipoisson"), type="response"))) + 
   geom_text(data=labels, mapping = aes(x=GDP_per_cap, y=Value, label=Area), segment.color = "grey50", point.padding = NA, size=1.5, nudge_x = c(0.1, 0.1,0.1,-0.05,0.1), nudge_y = c(10, 10,10, 10, -14))+
   annotate("segment", x=6e+4, xend = 5e+4, y=128, yend = 136, colour="grey50")+
-  guides(colour = guide_colorbar(barwidth = 0.3, barheight = 3, units="cm", ticks = FALSE, title = "Prop. of total food\nsupply from seafood", title.position = "top", title.hjust = 0))+
+  guides(colour = guide_colorbar(barwidth = 0.3, barheight = 3, units="cm", ticks = FALSE, title = "Prop. of total food\nsupply from seafood", title.position = "top", title.hjust = 0))#+
   
-  ggsave("Meat_fish_consumption.tiff", device="tiff", dpi=600, width=8, height=6, units="cm")+
-  ggsave("Meat_fish_consumption.pdf", device="pdf", dpi=600, width=8, height=6, units="cm")
+  # ggsave("Meat_fish_consumption.tiff", device="tiff", dpi=600, width=8, height=6, units="cm")+
+  # ggsave("Meat_fish_consumption.pdf", device="pdf", dpi=600, width=8, height=6, units="cm")
+  # 
   
-  
-  
-hist(food_bal_animal$Value)
+summary(glm(consumption_gdp$data$Value~(consumption_gdp$data$GDP_per_cap), family = "quasipoisson"))
+
+
+    
+exp((1.446e-05*10000))
 
 (unique(food_bal_total$Item))
 ```
@@ -158,22 +161,45 @@ hist(food_bal_animal$Value)
 
 #Share of fish in food supply
 
-(food_bal_australia <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
-   filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
-   filter(Area == c("Australia")) %>% 
-   filter(`Item Code`!= 2948) %>% 
-   filter(Item %in% c("Meat", "Fish, Seafood")) %>% 
-   group_by(Item) %>% 
-   nest() %>% 
-   mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
-   unnest()
+(food_bal_australia <- 
+   bind_rows(
+     fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c("Meat", "Fish, Seafood")) %>% 
+       group_by(Item) %>% 
+       nest() %>% 
+       mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
+       unnest(),
+     
+     fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables","Vegetable Oils", "Spices", "Starchy Roots" , "Aquatic Plants",  "Offals, Edible", "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs", "Miscellaneous")) %>% 
+       mutate(Item="Total food") %>% 
+       drop_na(Value) %>% 
+       group_by(Year, Item) %>% 
+       summarise(Value=sum(Value)) %>% 
+       ungroup() %>% 
+       group_by(Item) %>% 
+       nest() %>% 
+       mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
+       unnest()
+     
+     
+   )
 )
 
 
-trends <- ggplot(food_bal_australia, aes(x=Year, y=Relative_value, colour=Item))+
+
+
+
+  trends <- ggplot(food_bal_australia, aes(x=Year, y=Relative_value, colour=Item))+
   geom_line(size=0.6)+
   theme_pubr()+
-  scale_color_manual(values = c( "dodgerblue","grey20")) +#"#440154FF" "#56C667FF"
+  scale_color_manual(values = c( "dodgerblue","grey20", "grey50")) +#"#440154FF" "#56C667FF"
   theme(
     text = element_text(size=5),
     legend.position= c(0.2,0.85),
@@ -182,7 +208,7 @@ trends <- ggplot(food_bal_australia, aes(x=Year, y=Relative_value, colour=Item))
     legend.key.size = unit(0.25, "cm"),
     legend.background = element_rect(fill="transparent")
   )+
-  labs(y=bquote(Relative~~Australian~consumption~capita^-1))+
+  labs(y=bquote(Relative~consumption~capita^-1))+
   ggsave("Meat_vs_seafood_trends.tiff", device="tiff", dpi=600, width=8, height=6, units="cm")+
   ggsave("Meat_vs_seafood_trends.pdf", device="pdf", dpi=600, width=8, height=6, units="cm")
 
@@ -638,6 +664,7 @@ fish_consumption$Value[fish_consumption$Year==2013]-aqua_fish_combo$Value[aqua_f
 
 ```
 
+
 #Combining production trends
 ```{r}
 
@@ -650,7 +677,6 @@ ggarrange(crops_plot, livestock, seafood, seafood_demand_supply,
 
 
 ```
-
 
 #EWS for fisheries
 ```{r}
@@ -810,6 +836,81 @@ ggarrange(landings, Variance, AR1,
 ```
 
 
+#Breakdown of australian aquaculture
+```{r}
+(top_spp <- fread("aqua-prod-raw.csv", header=TRUE) %>%
+  rename(Country = `Country (Country)`,
+         Species = `Species (ASFIS species)`,
+         Farming_area = `Aquaculture area (FAO major fishing area)`,
+         Environment = `Environment (Environment)`) %>% 
+  gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+  mutate(Year = as.numeric(Year)) %>% 
+  mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                           Value=="-" ~ "NA",
+                           Value == "..." ~ "NA",
+                           Value ==" " ~ "NA",
+                           TRUE ~ Value)) %>% 
+  filter(Country=="Australia") %>%
+  #filter(Species =="Atlantic salmon") %>% 
+  #filter(!grepl("Inland waters", Farming_area)) %>% 
+  filter(Unit == "Tonnes - live weight") %>% 
+  mutate(Value = gsub(" F", "", Value) %>% 
+           as.numeric()) %>% 
+  filter(Year >2016) %>% 
+  drop_na() %>% 
+  group_by(Species) %>% 
+  summarise(Value=sum(Value)) %>% 
+  arrange(-Value) %>% 
+  slice(1:10)
+)
+
+
+fread("aqua-prod-raw.csv", header=TRUE) %>%
+  rename(Country = `Country (Country)`,
+         Species = `Species (ASFIS species)`,
+         Farming_area = `Aquaculture area (FAO major fishing area)`,
+         Environment = `Environment (Environment)`) %>% 
+  gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+  mutate(Year = as.numeric(Year)) %>% 
+  mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                           Value=="-" ~ "NA",
+                           Value == "..." ~ "NA",
+                           Value ==" " ~ "NA",
+                           TRUE ~ Value)) %>% 
+  filter(Country=="Australia") %>%
+  #filter(Species =="Atlantic salmon") %>% 
+  #filter(!grepl("Inland waters", Farming_area)) %>% 
+  filter(Unit == "Tonnes - live weight") %>% 
+  mutate(Value = gsub(" F", "", Value) %>% 
+           as.numeric()) %>% 
+  filter(Species %in% top_spp$Species) %>%
+  filter(Year %in% c(1967, 1977, 1987, 1997, 2007, 2017)) %>% 
+  mutate(Year = factor(Year)) %>% 
+  drop_na(Value) %>% 
+  group_by(Species, Year) %>% 
+  summarise(Value=sum(Value)) %>% 
+  ggplot(aes(x=Year, y=Value, fill=Species))+
+  geom_bar(stat="identity")+
+  theme_pubr()+
+  theme(
+    text = element_text(size = 10),
+    legend.text = element_text(size=6),
+    legend.position = c(0.4, 0.85),
+    legend.key.size = unit(0.3, "cm"),
+    legend.title = element_blank(),
+    legend.background = element_rect(fill = "transparent")
+  )+
+  scale_fill_manual(values=viridis(10))+
+  labs(y="Biomass (thousand tonnes)")+
+  scale_y_continuous(breaks=c(0,25000, 50000, 75000, 100000), labels=c("0", "25", "50", "75", "100"))+
+  guides(fill = guide_legend(byrow = TRUE, nrow = 5, ncol=2))+
+  ggsave("Australian aquaculture.tiff", device="tiff", dpi=300, width=8.9, height=8, units = "cm")
+ 
+
+```
+
+
+
 #Import dependence
 ```{r}
 
@@ -851,6 +952,11 @@ ggarrange(landings, Variance, AR1,
   fread("SDG_scores.csv", header=TRUE)
 )
 
+(gsi_EIU <- 
+  fread("gsi.csv", header=TRUE) %>% 
+    mutate(iso_a3 = countrycode(country, origin="country.name", destination="iso3c", warn=TRUE)) %>% 
+    select(-country)
+)
 
 #proportion of catch from IUU - doesn't really work
 
@@ -918,14 +1024,16 @@ bind_rows(fread("NonIndustrial_watson.csv", header=TRUE), fread("Industrial-wats
                              TRUE ~ iso_a3)) %>% 
     left_join(SDG_scores, by="iso_a3") %>% 
     left_join(corruption, by="iso_a3") %>% 
-    select(Partner, Value, Import_dependence, iso_a3, SDG_14, CPI) %>% 
+    left_join(gsi_EIU, by="iso_a3") %>% 
+    select(Partner, Value, Import_dependence, iso_a3, SDG_14, CPI, gsi_prev, gsi_vuln, Illicit_trade) %>% 
     arrange(-Import_dependence) %>% 
     left_join(food_bal_seafood, by="iso_a3") %>%
     select(-Area) %>%
     left_join(food_bal_total, by="iso_a3") %>%
     mutate(Prop_seafood = Seafood/Total) %>%
     mutate(SDG_14_relative = SDG_14-54.96458) %>% 
-    mutate(CPI_relative = CPI-78.833333) %>% 
+    mutate(Illicit_inverse = 100-Illicit_trade) %>% 
+    #mutate(CPI_relative = CPI-78.833333) %>% 
     mutate(Partner = case_when(Partner=="United Rep. of Tanzania" ~ "Tanzania",
                                TRUE ~ Partner))
 )
@@ -935,7 +1043,7 @@ sdg14 <- readPNG("SDG14.png")
 sdg14 <- rasterGrob(sdg14)
 
 
-ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na() , aes(x=reorder(Partner, -Import_dependence), y=Import_dependence))+
+ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na(Seafood) , aes(x=reorder(Partner, -Import_dependence), y=Import_dependence))+
   geom_bar(aes(fill=SDG_14_relative), stat="identity")+
   theme_pubr()+
   theme(
@@ -955,7 +1063,42 @@ ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na() , aes(x=reorder(Part
   ggsave("Figure - progress toward SDG.pdf", device = "pdf", dpi=600, width = 12, height = 10, units = "cm")
 
 
-ggplot(data=all_seafood_trade %>% slice(1:31), 
+
+labels <- all_seafood_trade %>% slice(1:21) %>% drop_na(Seafood) %>% add_row(Partner= "", gsi_vuln=21.98, SDG_14 = 54.96458, Illicit_inverse = 19, Import_dependence = 0.1)
+
+
+ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na(Seafood) %>% 
+         add_row(Partner= "", gsi_vuln=21.98, SDG_14 = 54.96458, Illicit_inverse = 19, Import_dependence = 2) %>% 
+         mutate(shape = case_when(Partner=="" ~ "3",
+                                  TRUE ~ "1")), 
+       aes(x=gsi_vuln, y=SDG_14))+
+  geom_point(aes(size=Import_dependence,colour=Illicit_inverse, shape=shape))+
+  theme_bw()+
+  theme(
+    text = element_text(size=10),
+    panel.grid = element_blank(),
+    # legend.position = c(0.65,0.9),
+    # legend.direction = "horizontal",
+    legend.background = element_rect(fill="transparent")
+    )+
+  scale_colour_gradient(low="grey65",   high="firebrick", na.value = "black")+
+  scale_size(range = c(1,12))+
+  geom_vline(xintercept=21.98, linetype=2, colour="grey70")+
+  geom_hline(yintercept=54.96458, linetype=2, colour="grey70")+
+  geom_text_repel(data=labels, aes(x=gsi_vuln, y=SDG_14, label=Partner), point.padding = 0.72,  force = 1, size=3.4, max.iter = 2000, vjust="inward")+
+  labs(y="Progress towards SDG 14", x="Vulnerability to slavery", colour="Illicit trade risk", size="Prop. of seafood\nimports (%)")+
+  guides(shape=FALSE)+
+  #guides(fill = guide_colorbar(ticks = FALSE, barheight = 1, barwidth = 5, units="cm",  title.hjust = 0.5))+
+  #annotation_custom(sdg14, xmin = 18, xmax = 20, ymin = 17, ymax = 21)+
+  ggsave("Figure - import trade-offs.tiff", device = "tiff", dpi=600, width = 18, height = 13, units = "cm")+
+  ggsave("Figure - import trade-offs.pdf", device = "pdf", dpi=600, width = 18, height = 13, units = "cm")
+
+
+  
+
+
+
+      ggplot(data=all_seafood_trade %>% slice(1:31), 
        aes(x=CPI_relative, y=SDG_14_relative))+
   geom_point(aes(size=Import_dependence)) + 
   geom_vline(xintercept=0, linetype=2, colour="grey70")+
@@ -967,7 +1110,7 @@ ggplot(data=all_seafood_trade %>% slice(1:31),
 all_seafood_trade
 
 
-sum((all_seafood_trade %>% slice(1:21) %>% drop_na())$Import_dependence)
+sum((all_seafood_trade %>% slice(1:21) %>% drop_na(Seafood))$Import_dependence)
 
 ```
 
