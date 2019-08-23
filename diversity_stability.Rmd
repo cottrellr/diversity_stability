@@ -152,7 +152,7 @@ summary(glm(consumption_gdp$data$Value~(consumption_gdp$data$GDP_per_cap), famil
     
 exp((1.446e-05*10000))
 
-(unique(food_bal_total$Item))
+(unique(gdp$Year))
 ```
 
 
@@ -380,6 +380,7 @@ ggarrange(si_crops_plot_a,
   ggsave("Figure - SI crops.tiff", device="tiff", dpi=600, width=12, height=5, units = "cm")
 
 
+unique(crops$Item)
 ```
 
 #livestock industry
@@ -1085,7 +1086,7 @@ ggplot(data=all_seafood_trade %>% slice(1:21) %>% drop_na(Seafood) %>%
   scale_size(range = c(1,12))+
   geom_vline(xintercept=21.98, linetype=2, colour="grey70")+
   geom_hline(yintercept=54.96458, linetype=2, colour="grey70")+
-  geom_text_repel(data=labels, aes(x=gsi_vuln, y=SDG_14, label=Partner), point.padding = 0.72,  force = 1, size=3.4, max.iter = 2000, vjust="inward")+
+  geom_text_repel(data=labels, aes(x=gsi_vuln, y=SDG_14, label=Partner),point.padding = 0.62,force = 1, size=3.4, max.iter = 4000, vjust="inward")+
   labs(y="Progress towards SDG 14", x="Vulnerability to slavery", colour="Illicit trade risk", size="Prop. of seafood\nimports (%)")+
   guides(shape=FALSE)+
   #guides(fill = guide_colorbar(ticks = FALSE, barheight = 1, barwidth = 5, units="cm",  title.hjust = 0.5))+
@@ -1633,8 +1634,10 @@ agriculture_headlines <-
 
 #Headlines analysis 
 ```{r}
-(ranks_ag <- fread("Headlines_ag.csv", header=TRUE) %>% 
-  filter(!is.na(Sentiment_1)) %>%
+(ranks_ag <- fread("Headlines_ag_AF.csv", header=TRUE) %>%
+   mutate(Consensus = case_when(Agreement == "TRUE" ~ Sentiment_2,
+                                TRUE ~ Consensus)) %>% 
+  filter(!is.na(Consensus)) %>%
    mutate(State = case_when(State == "Australian Capital Territory" ~ "ACT",
                            State == "Western Australia" ~ "WA",
                            State == "Victoria" ~ "VIC",
@@ -1644,36 +1647,38 @@ agriculture_headlines <-
                            State=="South Australia" ~ "SA",
                            State == "Queensland" ~ "QLD")) %>% 
   group_by(State) %>% 
-   summarise(Sum = sum(Sentiment_1))
+   summarise(Sum = sum(Consensus))
 )
 
 
 (AG_sentiment <- 
-  fread("Headlines_ag.csv", header=TRUE) %>% 
-  filter(!is.na(Sentiment_1)) %>% 
-  mutate(Sentiment_total = case_when(Sentiment_1 == -1 ~ "Negative",
-                                     Sentiment_1 == 0 ~ "Neutral",
-                                     Sentiment_1 == 1 ~ "Positive")) %>% 
-  group_by(State) %>% 
-  
-  count(Sentiment_total) %>% 
-  group_by(State) %>% 
-  mutate(Prop = prop.table(n)) %>% 
-  ungroup() %>% 
-  mutate(Sentiment_total = factor(Sentiment_total, levels=c("Positive", "Neutral", "Negative"))) %>% 
-  mutate(State = case_when(State == "Australian Capital Territory" ~ "ACT",
-                           State == "Western Australia" ~ "WA",
-                           State == "Victoria" ~ "VIC",
-                           State == "New South Wales" ~ "NSW",
-                           State== "Tasmania" ~ "TAS",
-                           State == "Northern Territory" ~ "NT",
-                           State=="South Australia" ~ "SA",
-                           State == "Queensland" ~ "QLD")) %>% 
-  left_join(ranks_ag, by="State") %>% 
-  
-  ggplot(aes(x=reorder(State, -Sum), y=Prop, fill=Sentiment_total))+
-  geom_bar(stat="identity")+
-  coord_flip()+
+    fread("Headlines_ag_AF.csv", header=TRUE) %>% 
+    mutate(Consensus = case_when(Agreement == "TRUE" ~ Sentiment_2,
+                                 TRUE ~ Consensus)) %>% 
+    filter(!is.na(Consensus)) %>% 
+    mutate(Sentiment_total = case_when(Consensus == -1 ~ "Negative",
+                                       Consensus == 0 ~ "Neutral",
+                                       Consensus == 1 ~ "Positive")) %>% 
+    group_by(State) %>% 
+    
+    count(Sentiment_total) %>% 
+    group_by(State) %>% 
+    mutate(Prop = prop.table(n)) %>% 
+    ungroup() %>% 
+    mutate(Sentiment_total = factor(Sentiment_total, levels=c("Positive", "Neutral", "Negative"))) %>% 
+    mutate(State = case_when(State == "Australian Capital Territory" ~ "ACT",
+                             State == "Western Australia" ~ "WA",
+                             State == "Victoria" ~ "VIC",
+                             State == "New South Wales" ~ "NSW",
+                             State== "Tasmania" ~ "TAS",
+                             State == "Northern Territory" ~ "NT",
+                             State=="South Australia" ~ "SA",
+                             State == "Queensland" ~ "QLD")) %>% 
+    left_join(ranks_ag, by="State") %>% 
+    
+    ggplot(aes(x=reorder(State, -Sum), y=Prop, fill=Sentiment_total))+
+    geom_bar(stat="identity")+
+    coord_flip()+
     theme_pubr()+
     theme(
       text = element_text(size=8),
@@ -1693,11 +1698,13 @@ agriculture_headlines <-
 
 
 (ranks_fish <- 
-    fread("Headlines - fisheries.csv", header=TRUE) %>% 
-  filter(!is.na(Sentiment_1)) %>% 
-  mutate(Sentiment_total = case_when(Sentiment_1 == -1 ~ "Negative",
-                                     Sentiment_1 == 0 ~ "Neutral",
-                                     Sentiment_1 == 1 ~ "Positive")) %>% 
+    fread("Headlines - fisheries_AF.csv", header=TRUE) %>% 
+     mutate(Consensus = case_when(Agreement == "TRUE" ~ Sentiment_2,
+                                TRUE ~ Consensus)) %>% 
+  filter(!is.na(Consensus)) %>% 
+  mutate(Sentiment_total = case_when(Consensus == -1 ~ "Negative",
+                                     Consensus == 0 ~ "Neutral",
+                                     Consensus == 1 ~ "Positive")) %>% 
   group_by(State) %>% 
   
   count(Sentiment_total) %>% 
@@ -1720,11 +1727,13 @@ agriculture_headlines <-
 
 
 (fisheries_sentiment <- 
-  fread("Headlines - fisheries.csv", header=TRUE) %>% 
-  filter(!is.na(Sentiment_1)) %>% 
-  mutate(Sentiment_total = case_when(Sentiment_1 == -1 ~ "Negative",
-                                     Sentiment_1 == 0 ~ "Neutral",
-                                     Sentiment_1 == 1 ~ "Positive")) %>% 
+  fread("Headlines - fisheries_AF.csv", header=TRUE) %>% 
+  mutate(Consensus = case_when(Agreement == "TRUE" ~ Sentiment_2,
+                                TRUE ~ Consensus)) %>% 
+  filter(!is.na(Consensus)) %>% 
+  mutate(Sentiment_total = case_when(Consensus == -1 ~ "Negative",
+                                     Consensus == 0 ~ "Neutral",
+                                     Consensus == 1 ~ "Positive")) %>%
   group_by(State) %>% 
   
   count(Sentiment_total) %>% 
@@ -1765,11 +1774,15 @@ agriculture_headlines <-
 
 
 (ranks_aqua <- 
-  fread("Headlines - aquaculture.csv", header=TRUE) %>% 
-  filter(!is.na(Sentiment_1)) %>% 
-  mutate(Sentiment_total = case_when(Sentiment_1 == -1 ~ "Negative",
-                                     Sentiment_1 == 0 ~ "Neutral",
-                                     Sentiment_1 == 1 ~ "Positive")) %>% 
+  fread("Headlines - aquaculture_AF.csv", header=TRUE) %>% 
+    mutate(Consensus = as.character(Consensus)) %>% 
+    mutate(Consensus = case_when(AGREEMENT == "TRUE" ~ Sentiment_1,
+                                TRUE ~ Consensus)) %>%
+  mutate(Sentiment_total = case_when(Consensus == -1 ~ "Negative",
+                                     Consensus == 0 ~ "Neutral",
+                                     Consensus == 1 ~ "Positive")) %>%
+    filter(!is.na(Consensus)) %>% 
+  
   group_by(State) %>% 
   
   count(Sentiment_total) %>% 
@@ -1788,17 +1801,20 @@ agriculture_headlines <-
   filter(Sentiment_total=="Negative") %>% 
   mutate(Rank = rank(-Prop)) %>% 
   select(State, Rank) %>% 
-  add_row(State="NT", Rank=8) %>% 
-  add_row(State="QLD", Rank=8)
+  add_row(State="NT", Rank=8)
+  # add_row(State="QLD", Rank=8)
 )
 
 
 (aquaculture_sentiment <- 
-  fread("Headlines - aquaculture.csv", header=TRUE) %>% 
-  filter(!is.na(Sentiment_1)) %>% 
-  mutate(Sentiment_total = case_when(Sentiment_1 == -1 ~ "Negative",
-                                     Sentiment_1 == 0 ~ "Neutral",
-                                     Sentiment_1 == 1 ~ "Positive")) %>% 
+  fread("Headlines - aquaculture_AF.csv", header=TRUE) %>% 
+    mutate(Consensus = as.character(Consensus)) %>% 
+    mutate(Consensus = case_when(AGREEMENT == "TRUE" ~ Sentiment_1,
+                                TRUE ~ Consensus)) %>%
+  filter(!is.na(Consensus)) %>% 
+  mutate(Sentiment_total = case_when(Consensus == -1 ~ "Negative",
+                                     Consensus == 0 ~ "Neutral",
+                                     Consensus == 1 ~ "Positive")) %>% 
   group_by(State) %>% 
   
   count(Sentiment_total) %>% 
@@ -1839,7 +1855,7 @@ sentiment_legend <- get_legend(aquaculture_sentiment)
 all_sentiment <- ggarrange(annotate_figure(
     ggarrange(AG_sentiment, aquaculture_sentiment, fisheries_sentiment,
               legend = FALSE,
-              labels=c("d", "e", "f"),
+              #labels=c("d", "e", "f"),
               font.label = list(size=9),
               label.x=c(0, -0.05, -0.07),
               nrow = 1,
@@ -2060,7 +2076,7 @@ Impacts <-
 impacts_all <-
   ggarrange(AG_impacts, AQ_impacts, FISH_impacts,
           widths = c(1, 1, 1.2),
-          labels=c("a", "b", "c"),
+          #labels=c("a", "b", "c"),
           font.label = list(size=9),
           align = "v",
           nrow = 1,
@@ -2076,6 +2092,8 @@ impacts_all <-
 ```{r}
 
 ggarrange(impacts_all, all_sentiment,
+          labels = c("a", "b"),
+          font.label = list(size=9),
           nrow = 2,
           ncol = 1, 
           heights = c(1.15,1))+
