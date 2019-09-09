@@ -23,6 +23,8 @@ library(stringr)
 library(magrittr)
 library(ggrepel)
 library(viridis)
+library(boot)
+library(Kendall)
 ```
 
 #Plot of consumption versus GDP
@@ -161,6 +163,721 @@ exp((1.446e-05*10000))
 
 #Share of fish in food supply
 
+
+(food_bal_australia <- 
+   bind_rows(
+     fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c("Meat", "Fish, Seafood", "Cereals - Excluding Beer", "Milk - Excluding Butter", "Eggs", "Fruits - Excluding Wine", "Pulses", "Vegetables", "Starchy Roots")) %>% 
+       mutate(Item = case_when(Item == "Cereals - Excluding Beer" ~ "Cereals", 
+                               Item == "Milk - Excluding Butter" ~ "Milk", 
+                               Item %in% c("Fruits - Excluding Wine", "Pulses", "Vegetables", "Starchy Roots")~ "Fruit, Vegetables", 
+                               TRUE ~ Item)) %>% 
+       group_by(Item, Year) %>%
+       summarise(Value=sum(Value)) %>% 
+       ungroup() %>% 
+       group_by(Item) %>% 
+       nest() %>% 
+       mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
+       unnest(),
+     
+     fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables","Vegetable Oils", "Spices", "Starchy Roots" , "Aquatic Plants",  "Offals, Edible", "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs", "Miscellaneous")) %>% 
+       mutate(Item="Total food") %>% 
+       drop_na(Value) %>% 
+       group_by(Year, Item) %>% 
+       summarise(Value=sum(Value)) %>% 
+       ungroup() %>% 
+       group_by(Item) %>% 
+       nest() %>% 
+       mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
+       unnest()
+     
+     
+   )
+)
+
+
+
+consumption_items <- ggplot(food_bal_australia %>% 
+         mutate(Item = factor(Item, levels=c("Fish, Seafood", "Fruit, Vegetables",  "Meat", "Milk", "Cereals", "Eggs", "Total food"))), aes(x=Year, y=Relative_value, colour=Item))+
+  geom_line(size=0.9)+
+  scale_color_manual(values = rev(c("#D53E4F", "#FC8D59" ,"#FEE08B", "goldenrod", "#E6F598", "#99D594", "#3288BD")))+
+  theme_pubr()+
+  scale_x_continuous(limits=c(1960,2020))+
+  theme(
+    legend.position = c(0.2,0.8),
+    legend.title = element_blank(),
+    legend.text = element_text(size=7),
+    legend.key.height = unit(0.2, "cm"),
+    text = element_text(size=9)
+  )+
+  labs(y="Relative consumption")+
+  ggsave("Figure 1a - relative consumption.tiff", dpi=600, device = "tiff", width=9, height=7, units="cm")
+
+
+
+(seafood <- 
+  fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c( "Fish, Seafood")) %>% 
+    select(Item, Year, Value) %>% 
+    rename(Seafood=Value)
+)
+
+
+(animal <- 
+  fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c( "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs")) %>% 
+    select(Item, Year, Value) %>% 
+    group_by(Year) %>% 
+    summarise(Animal=sum(Value))
+)
+
+(animal_no_milk <- 
+  fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c( "Meat", "Fish, Seafood", "Aquatic Plants", "Eggs")) %>% 
+    select(Item, Year, Value) %>% 
+    group_by(Year) %>% 
+    summarise(Animal_no_milk=sum(Value))
+)
+
+
+(Total <- 
+  fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("Australia")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables","Vegetable Oils", "Spices", "Starchy Roots" , "Aquatic Plants",  "Offals, Edible", "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs", "Miscellaneous")) %>% 
+    select(Item, Year, Value) %>% 
+    group_by(Year) %>% 
+    summarise(Total=sum(Value))
+)
+
+
+
+(proportions <- 
+  seafood %>% 
+  left_join(animal, by="Year") %>% 
+  left_join(animal_no_milk, by="Year") %>% 
+    left_join(Total, by="Year") %>% 
+    mutate(prop_total=Seafood/Animal) %>% 
+    mutate(prop_no_milk = Seafood/Animal_no_milk) %>% 
+    mutate(prop_total = Seafood/Total)
+)
+
+
+
+proportions2 <- 
+  bind_rows(
+  proportions %>% 
+  select(Year, Seafood, prop_total) %>% 
+  rename(Value=prop_total) %>% 
+  mutate(Item="Incl. Milk"),
+  
+  proportions %>% 
+  select(Year, Seafood, prop_no_milk) %>% 
+  rename(Value=prop_no_milk) %>% 
+  mutate(Item = "Excl. Milk")
+  
+)
+
+
+
+prop_seafood <- ggplot(proportions2 %>% 
+                         filter(Year %in% c(1973, 1993, 2013)) %>% 
+                         mutate(Year = factor(Year)), 
+                       aes(x=Year, y=Value, fill=Item))+
+  geom_bar(stat = "identity", position = "dodge")+
+  #geom_line(size=0.9)+
+  scale_fill_manual(values = rev(c("grey70", "#3288BD")))+
+  theme_pubr()+
+  #scale_x_continuous(limits=c(1960,2020))+
+  theme(
+    legend.position = c(0.15,0.9),
+    legend.title = element_blank(),
+    legend.text = element_text(size=7),
+    legend.key.height = unit(0.3, "cm"),
+    text = element_text(size=9)
+  )+
+  labs(y="Prop. animal consumption from seafood")+
+  ggsave("Figure 1b - proportions.tiff", device="tiff", dpi=600, width=9, height=7, units="cm")
+
+
+
+
+
+
+
+
+fish_img <- readPNG("tuna1.png")
+fish_img <- rasterGrob(fish_img)
+
+(production <- 
+   bind_rows(
+     fisheries <- 
+       fread("fisheries_prod_raw.csv", header=TRUE) %>%
+       rename(Country = `Country (Country)`,
+              Species = `Species (ASFIS species)`,
+              Fishing_area = `Fishing area (FAO major fishing area)`,
+              Unit=`Unit (Unit)`) %>% 
+       gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
+       mutate(Year = as.numeric(Year)) %>% 
+       mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                                Value=="-" ~ "NA",
+                                Value == "..." ~ "NA",
+                                Value ==" " ~ "NA",
+                                TRUE ~ Value)) %>% 
+       filter(Country=="Australia") %>%
+       filter(Unit == "Tonnes - live weight") %>% 
+       mutate(Value = gsub(" F", "", Value) %>% 
+                as.numeric()) %>% 
+       drop_na(Value) %>% 
+       filter(Year %in% c(1960:2017)) %>%
+       #filter(!Species %in% c("Salps", "Hard corals, madrepores nei" )) %>% 
+       group_by(Year) %>%
+       summarise(Value = sum(Value)) %>% 
+       mutate(Element="Capture fisheries"),
+     
+     aquaculture <- 
+       fread("aqua-prod-raw.csv", header=TRUE) %>%
+       rename(Country = `Country (Country)`,
+              Species = `Species (ASFIS species)`,
+              Farming_area = `Aquaculture area (FAO major fishing area)`,
+              Environment = `Environment (Environment)`) %>% 
+       gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+       mutate(Year = as.numeric(Year)) %>% 
+       mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                                Value=="-" ~ "NA",
+                                Value == "..." ~ "NA",
+                                Value ==" " ~ "NA",
+                                TRUE ~ Value)) %>% 
+       filter(Country=="Australia") %>%
+       #filter(Species =="Atlantic salmon") %>% 
+       #filter(!grepl("Inland waters", Farming_area)) %>% 
+       filter(Unit == "Tonnes - live weight") %>% 
+       mutate(Value = gsub(" F", "", Value) %>% 
+                as.numeric()) %>% 
+       filter(Year >1959) %>% 
+       drop_na() %>% 
+       group_by(Year) %>% 
+       summarise(Value=sum(Value)) %>% 
+       mutate(Element="Aquaculture")
+   ) %>%
+   mutate(Element= factor(Element, levels=c("Capture fisheries", "Aquaculture"))) %>%
+   group_by(Element) %>% 
+   nest() %>% 
+   mutate(GAM = purrr::map(data, ~(predict(gam(.$Value~s(.$Year)))))) %>% 
+   unnest() %>% 
+   mutate(GAM = case_when(Element=="Aquaculture" ~ NA_real_,
+                          TRUE ~ GAM)) %>% 
+   ggplot(aes(x=Year, y=Value, colour=Element))+
+   geom_line(size=0.9)+
+   #geom_line(aes(y=GAM, group=Element), colour="grey50", size=0.25)+
+   theme_pubr()+
+   theme(
+     text = element_text(size=9),
+     legend.background = element_rect(fill="transparent"),
+     legend.position = c(0.22,0.9),
+     legend.direction = "vertical",
+     legend.box.spacing = unit(0,"cm"),
+     #legend.key.width = unit(0.4, "cm"),
+     legend.key.height = unit(0.3,"cm"),
+     legend.title = element_blank(),
+     legend.text = element_text(size=7),
+     legend.spacing = unit(-0.3, "cm")
+   )+
+   scale_color_manual(values=c("dodgerblue", "dodgerblue4")) + 
+   labs(y=bquote(Domestic~production~("1000s"~tonnes)))+
+   scale_y_continuous(labels = c("0", "50","100","150", "200", "250"), breaks = c(0, 5e+4,10e+4,15e+4, 20e+4, 25e+4), limits = c(0,27.5e+4))+
+   scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+   #annotate("text", x=1967, y=27.5e+4, label="Fisheries/Seafood", hjust=0, size=2)+
+    #annotation_custom(fish_img, xmin = 1958,xmax = 1967, ymin = 25.7e+4, ymax=29.1e+4)+
+   ggsave("Figure 1c - domestic produdction.tiff", dpi=600, device = "tiff", width=9, height = 7, units = "cm")
+)
+
+
+
+(pop <- fread("Population.csv", header=TRUE) %>% 
+   rename(Country = `Country Name`) %>% 
+   select(-c(`Indicator Name`, `Indicator Code`, `Country Code`, V64)) %>%
+   mutate(iso_a3 = countrycode(Country, origin="country.name", destination="iso3c", warn=TRUE))%>% 
+   drop_na(iso_a3) %>% 
+   gather(key="Year", value="Population", -c(Country, iso_a3))%>% 
+   mutate_if(bit64::is.integer64, as.integer) %>% 
+   filter(Country=="Australia") %>% 
+   mutate(Year=as.integer(Year))
+)
+
+(seafood_demand_supply <- 
+    bind_rows(
+      aqua_fish_combo <- 
+        bind_cols(fisheries %>% 
+                    rename(Fisheries = Value), 
+                  aquaculture %>% 
+                    select(Value, Element) %>% 
+                    rename(Aquaculture=Value)
+        ) %>%   
+        mutate(Value=Fisheries+Aquaculture) %>% 
+        select(Year, Value) %>% 
+        mutate(Element = "Domestic production"),
+      
+      fish_consumption <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+        filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+        filter(Area == c("Australia")) %>% 
+        filter(`Item Code`!= 2948) %>% 
+        filter(Item %in% c("Fish, Seafood")) %>% 
+        select(Year, Value) %>% 
+        rename(Supply=Value) %>% 
+        left_join(pop, by="Year") %>% 
+        mutate(Value = (Supply*Population)/1000) %>% 
+        select(Year, Value) %>% 
+        mutate(Element="Domestic consumption")
+    ) %>% 
+    mutate(Element = factor(Element, levels=c("Domestic consumption",  "Domestic production"))) %>% 
+    ggplot(aes(Year, Value, colour=Element, linetype=Element))+
+    geom_line(size=0.9)+
+    theme_pubr()+
+    theme(
+      text = element_text(size=9),
+      legend.background = element_rect(fill="transparent"),
+      #axis.title.y = element_blank(),
+      legend.position = c(0.25,0.9),
+      legend.direction = "vertical",
+      legend.box.spacing = unit(0,"cm"),
+      #legend.key.width = unit(0.4, "cm"),
+      legend.key.height = unit(0.3,"cm"),
+      legend.title = element_blank(),
+      legend.text = element_text(size=7),
+      legend.spacing = unit(-0.3, "cm"),
+      plot.margin = unit(c(t=0.5, r=4.5, b=0.5, l=4.5), "cm")
+    )+
+    labs(y="Seafood biomass (1000s tonnes)")+
+    scale_color_manual(values = c("black", "#3288BD"))+
+    scale_linetype_manual(values=c(1,1,1))+
+    scale_y_continuous(labels = c("0", "200","400","600"), breaks = c(0, 2e+5,4e+5,6e+5), limits = c(0,6.1e+5))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
+    annotate("segment",x=2013, xend=2013, y=260e+3, yend=590e+3,  arrow=arrow(length = unit(1.5, "mm"),  ends = "both", type = "open"), size=0.45, colour="grey50")+
+    annotate("text", x=2019, y=410e+3, label="354 217 \nMT",size=2)+
+    ggsave("Production_seafood.tiff", dpi=600, device = "tiff", width=18, height = 7, units = "cm")
+)
+
+
+
+
+
+ggarrange(ggarrange(consumption_items, prop_seafood,
+          labels=c("a", "b"),
+          nrow = 1,
+          ncol=2,
+          label.x = c(0,-0.05)
+          #font.label = list(size=8)
+          ),
+          seafood_demand_supply, 
+          nrow = 2, 
+          ncol=1,
+          labels=c("", "c"),
+          label.x = c(0, 0.18)
+          )+
+  ggsave("Figure - consumption trends.tiff", device="tiff", dpi=600, width = 18, height = 14, units = "cm")+
+  ggsave("Figure - consumption trends.pdf", device="pdf", dpi=600, width = 18, height = 14, units = "cm")
+
+
+
+```
+
+
+
+#EWS for fisheries
+```{r}
+window <- 0.5
+
+(fisheries <- 
+    fread("fisheries_prod_raw.csv", header=TRUE) %>%
+    rename(Country = `Country (Country)`,
+           Species = `Species (ASFIS species)`,
+           Fishing_area = `Fishing area (FAO major fishing area)`,
+           Unit=`Unit (Unit)`) %>% 
+    gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
+    mutate(Year = as.numeric(Year)) %>% 
+    mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                             Value=="-" ~ "NA",
+                             Value == "..." ~ "NA",
+                             Value ==" " ~ "NA",
+                             TRUE ~ Value)) %>% 
+    filter(Country=="Australia") %>%
+    filter(Unit == "Tonnes - live weight") %>% 
+    mutate(Value = gsub(" F", "", Value) %>% 
+             as.numeric()) %>% 
+    drop_na(Value) %>% 
+    # mutate(Value = case_when(is.na(Value)~0,
+    #                          TRUE ~ Value)) %>% 
+    # filter(!grepl("Inland waters", Fishing_area)) %>% 
+    # left_join(spp, by="Species") %>% 
+    # rename(Group = ISSCAAP_Group) %>%
+    # select(Year, Country, Group, Value) %>% 
+    group_by(Year) %>% 
+    summarise(Value=sum(Value)) %>%
+    mutate(Normalized_value = (Value - mean(Value))/sd(Value)) %>% 
+    mutate(Element="Fisheries") %>% 
+    mutate(Residuals = resid(gam(Value~s(Year)))) %>% 
+    mutate(Variance = rollapply(data = Residuals, 
+                                width = window*length(Residuals), 
+                                FUN = sd, 
+                                align = "right", 
+                                fill = NA, 
+                                na.rm = T)) %>% 
+    mutate(Mean = rollapply(data = Residuals, 
+                            width = window*length(Residuals), 
+                            FUN = mean, 
+                            align = "right", 
+                            fill = NA, 
+                            na.rm = T)) %>%
+    mutate(CV=Variance/Mean) %>%
+    mutate(AR1 = rollapply(data = Residuals, 
+                           width = window*length(Residuals), 
+                           FUN = function(z,  na.rm = FALSE){
+                             return(acf(z, plot=FALSE)$acf[2])
+                           },  
+                           align = "right", 
+                           fill = NA, 
+                           na.rm = T)) %>% 
+    mutate(Return_rate = rollapply(data=Residuals,
+                                   width= window*length(Residuals),
+                                   FUN = function(z, na.rm=FALSE){
+                                     ar1 <- ar.ols(z,demean=FALSE, order.max = 1, aic = FALSE, intercept = FALSE)
+                                     return(return_rate = 1/ar1$ar[1])
+                                   },
+                                   align = "right", 
+                                   fill = NA, 
+                                   na.rm = T)) %>% 
+    mutate(Kurtosis = rollapply(data=Residuals,
+                                   width=window*length(Residuals),
+                                   FUN = moments::kurtosis,
+                                   align = "right", 
+                                   fill = NA, 
+                                   na.rm = T)) %>% 
+    mutate(Skewness = rollapply(data=Residuals,
+                                   width=0.5*length(Residuals),
+                                   FUN = moments::skewness,
+                                   align = "right", 
+                                   fill = NA, 
+                                   na.rm = T))
+)
+
+
+#fishing boat png 
+
+fishing_img <- readPNG("fishingboat.png")
+fishing_img <- rasterGrob(fishing_img)
+
+
+
+(landings <- ggplot(fisheries,
+       aes(x=Year)) +
+  geom_line(aes(y=Value), colour="#3288BD", size=1.1)+
+  geom_line(aes(y=predict(gam(Value~s(Year)))), size=0.6, colour="grey60")+
+    theme_pubr()+
+    theme(
+      text = element_text(size=9),
+      axis.title.x = element_blank()
+      #plot.margin = unit(c(t=0.5, r=0.1,b=0.1,l=0.1), "cm")
+      
+      
+    )+
+    geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
+    scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.7e+5))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+    labs(y=bquote(Fisheries~landings~(Tx10^3)))+
+    #annotation_custom(fishing_img, xmin = 1950, 1960, ymin = 1.9e+5, ymax=2.9e+5)+
+    #annotate("text", x=1960, y=2.4e+5,label="Fisheries\nlandings", hjust=0, size=1.8)+
+    ggsave("EWS_landings.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+
+)
+
+
+variance_ts <- fisheries$Variance[!is.na(fisheries$Variance)]
+
+(variance_tau <- Kendall(1:length(variance_ts), variance_ts)$tau[1])
+
+tau.fc<-function(x,y){
+   y<-sample(x, replace = T)
+  tau<-as.numeric(Kendall(1:length(y), y)$tau)
+  return(tau)
+}
+
+boot_mod <- boot(data=variance_ts, statistic=tau.fc,  R=1000)
+hist(boot$t, xlim = c(-1, 1))
+abline(v=variance_tau, lty=2, col="red")
+length(which(boot$t>variance_tau))/1000
+
+
+
+
+
+(Variance <- ggplot(fisheries,
+       aes(x=Year)) +
+  geom_line(aes(y=Variance), colour="black", size=0.9)+
+    theme_pubr()+
+    theme(
+      text = element_text(size=9),
+      axis.title.x = element_blank()
+    )+
+    geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
+    scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+    labs(y=bquote(Variance~(Tx10^3)))+
+    annotate("segment", x=1950, xend=1982, y=8e+3, yend=8e+3, size=0.7, lineend = "butt", arrow=arrow(length = unit(1.8, "mm"), ends = "both", type = "open"))+
+    annotate("text", x=1966, y=9e+3, label="Rolling window", size=3)+
+    geom_text(x=1966, y=15e+3, label="tau~'= 0.815, p=0'", parse=TRUE, size=3)+
+    ggsave("EWS_variance.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+
+)
+
+
+(AR1_ts <- fisheries$AR1[!is.na(fisheries$AR1)])
+
+(AR1_tau <- Kendall(1:length(AR1_ts), AR1_ts)$tau[1])
+
+
+boot_mod <- boot(data=AR1_ts, statistic=tau.fc,  R=1000)
+hist(boot$t, xlim = c(-1, 1))
+abline(v=AR1_tau, lty=2, col="red")
+length(which(boot$t>AR1_tau))/1000
+
+
+
+
+(AR1 <- ggplot(fisheries,
+       aes(x=Year)) +
+  geom_line(aes(y=AR1), colour="black", size=0.9)+
+    theme_pubr()+
+    geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
+    theme(
+      text = element_text(size=9)
+    )+
+    #scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.55e+5))+
+    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+    labs(y="AR1", x="Year")+
+    annotate("segment", x=1950, xend=1982, y=0.05, yend=0.05, size=0.7, lineend = "butt", arrow=arrow(length = unit(1.8, "mm"), ends = "both", type = "open"))+
+    annotate("text", x=1966, y=0.1, label="Rolling window", size=3)+
+    annotate("text", x=1966, y=0.4, label="tau~'= 0.778, p=0'",, parse=TRUE, size=3)+
+    ggsave("EWS_AR1.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+
+
+)
+
+length(fisheries$Residuals)*window
+
+
+ggarrange(landings, Variance, AR1, 
+         nrow=3, ncol=1,
+         heights = c(1.6,1,1.15),
+         labels = c("a", "b", "c"),
+         font.label = list(size=9),
+         label.y = c(1, 1.1, 1),
+         align = "v")+
+  ggsave("Figure - EWS.tiff", device = "tiff", dpi=600, width = 9, height = 13, units = "cm")+
+  ggsave("Figure - EWS.pdf", device = "pdf", dpi=600, width = 9, height = 13, units = "cm")
+
+
+
+
+
+
+```
+
+
+
+
+#Production and perceptions
+```{r}
+(top_spp <- fread("aqua-prod-raw.csv", header=TRUE) %>%
+  rename(Country = `Country (Country)`,
+         Species = `Species (ASFIS species)`,
+         Farming_area = `Aquaculture area (FAO major fishing area)`,
+         Environment = `Environment (Environment)`) %>% 
+  gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+  mutate(Year = as.numeric(Year)) %>% 
+  mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                           Value=="-" ~ "NA",
+                           Value == "..." ~ "NA",
+                           Value ==" " ~ "NA",
+                           TRUE ~ Value)) %>% 
+  filter(Country=="Australia") %>%
+  #filter(Species =="Atlantic salmon") %>% 
+  #filter(!grepl("Inland waters", Farming_area)) %>% 
+  filter(Unit == "Tonnes - live weight") %>% 
+  mutate(Value = gsub(" F", "", Value) %>% 
+           as.numeric()) %>% 
+  filter(Year >2016) %>% 
+  drop_na() %>% 
+  group_by(Species) %>% 
+  summarise(Value=sum(Value)) %>% 
+  arrange(-Value) %>% 
+  slice(1:10)
+)
+
+
+aus_aqua <- fread("aqua-prod-raw.csv", header=TRUE) %>%
+  rename(Country = `Country (Country)`,
+         Species = `Species (ASFIS species)`,
+         Farming_area = `Aquaculture area (FAO major fishing area)`,
+         Environment = `Environment (Environment)`) %>% 
+  gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
+  mutate(Year = as.numeric(Year)) %>% 
+  mutate(Value = case_when(Value=="0 0" ~ "0.2",
+                           Value=="-" ~ "NA",
+                           Value == "..." ~ "NA",
+                           Value ==" " ~ "NA",
+                           TRUE ~ Value)) %>% 
+  filter(Country=="Australia") %>%
+  #filter(Species =="Atlantic salmon") %>% 
+  #filter(!grepl("Inland waters", Farming_area)) %>% 
+  filter(Unit == "Tonnes - live weight") %>% 
+  mutate(Value = gsub(" F", "", Value) %>% 
+           as.numeric()) %>% 
+  filter(Species %in% top_spp$Species) %>%
+  filter(Year %in% c(1967, 1977, 1987, 1997, 2007, 2017)) %>% 
+  mutate(Year = factor(Year)) %>% 
+  drop_na(Value) %>% 
+  group_by(Species, Year) %>% 
+  summarise(Value=sum(Value)) %>% 
+  ggplot(aes(x=Year, y=Value, fill=Species))+
+  geom_bar(stat="identity")+
+  theme_pubr()+
+  theme(
+    text = element_text(size = 10),
+    legend.text = element_text(size=6),
+    legend.position = c(0.4, 0.85),
+    legend.key.size = unit(0.3, "cm"),
+    legend.title = element_blank(),
+    legend.background = element_rect(fill = "transparent")
+  )+
+  scale_fill_manual(values=brewer.pal(n=10, name = "Spectral"))+
+  labs(y="Biomass (thousand tonnes)")+
+  scale_y_continuous(breaks=c(0,25000, 50000, 75000, 100000), labels=c("0", "25", "50", "75", "100"))+
+  guides(fill = guide_legend(byrow = TRUE, nrow = 5, ncol=2))+
+  ggsave("Australian aquaculture.tiff", device="tiff", dpi=300, width=8.9, height=8, units = "cm")
+
+
+(ranks_aqua <- 
+  fread("Headlines - aquaculture_AF.csv", header=TRUE) %>% 
+    mutate(Consensus = as.character(Consensus)) %>% 
+    mutate(Consensus = case_when(AGREEMENT == "TRUE" ~ Sentiment_1,
+                                TRUE ~ Consensus)) %>%
+  mutate(Sentiment_total = case_when(Consensus == -1 ~ "Negative",
+                                     Consensus == 0 ~ "Neutral",
+                                     Consensus == 1 ~ "Positive")) %>%
+    filter(!is.na(Consensus)) %>% 
+  
+  group_by(State) %>% 
+  
+  count(Sentiment_total) %>% 
+  group_by(State) %>% 
+  mutate(Prop = prop.table(n)) %>% 
+  ungroup() %>% 
+  mutate(Sentiment_total = factor(Sentiment_total, levels=c("Positive", "Neutral", "Negative"))) %>% 
+  mutate(State = case_when(State == "Australian Capital Territory" ~ "ACT",
+                           State == "Western Australia" ~ "WA",
+                           State == "Victoria" ~ "VIC",
+                           State == "New South Wales" ~ "NSW",
+                           State== "Tasmania" ~ "TAS",
+                           State == "Northern Territory" ~ "NT",
+                           State=="South Australia" ~ "SA",
+                           State == "Queensland" ~ "QLD")) %>% 
+  filter(Sentiment_total=="Negative") %>% 
+  mutate(Rank = rank(-Prop)) %>% 
+  select(State, Rank) %>% 
+  add_row(State="NT", Rank=8)
+  # add_row(State="QLD", Rank=8)
+)
+
+
+(aquaculture_sentiment <- 
+  fread("Headlines - aquaculture_AF.csv", header=TRUE) %>% 
+    mutate(Consensus = as.character(Consensus)) %>% 
+    mutate(Consensus = case_when(AGREEMENT == "TRUE" ~ Sentiment_1,
+                                TRUE ~ Consensus)) %>%
+  filter(!is.na(Consensus)) %>% 
+  mutate(Sentiment_total = case_when(Consensus == -1 ~ "Negative",
+                                     Consensus == 0 ~ "Neutral",
+                                     Consensus == 1 ~ "Positive")) %>% 
+  group_by(State) %>% 
+  
+  count(Sentiment_total) %>% 
+  group_by(State) %>% 
+  mutate(Prop = prop.table(n)) %>% 
+  ungroup() %>% 
+  mutate(Sentiment_total = factor(Sentiment_total, levels=c("Positive", "Neutral", "Negative"))) %>% 
+  mutate(State = case_when(State == "Australian Capital Territory" ~ "ACT",
+                           State == "Western Australia" ~ "WA",
+                           State == "Victoria" ~ "VIC",
+                           State == "New South Wales" ~ "NSW",
+                           State== "Tasmania" ~ "TAS",
+                           State == "Northern Territory" ~ "NT",
+                           State=="South Australia" ~ "SA",
+                           State == "Queensland" ~ "QLD")) %>% 
+  left_join(ranks_aqua, by="State") %>% 
+  
+  ggplot(aes(x=reorder(State, -Rank), y=Prop, fill=Sentiment_total))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+    theme_pubr()+
+    theme(
+      text = element_text(size=8),
+      #axis.title = element_blank(),
+      legend.spacing.x = unit(0.1, "cm"),
+      legend.box.spacing = unit(0.05, "cm"),
+      legend.position = "right",
+      legend.title = element_blank(),
+      legend.key.size = unit(0.35, "cm"),
+      #plot.margin = unit(c(t=0.2,r=1, b=0.2, l=0.2), "cm")
+    )+
+    labs(fill="Proportion of Sentiment")+
+    guides(fill=guide_legend(title.position = "bottom", title.hjust = 0.5))+
+    scale_fill_manual(values = c("dodgerblue", "grey70", "firebrick"))+
+    ggsave("Sentiment - aquaculture.tiff", device = "tiff", width = 4, height = 4, units = "cm")+
+    ggsave("Sentiment - aquaculture.pdf", device = "pdf", width = 4, height = 4, units = "cm")
+)
+
+
+
+nimby <- fread("state_production.csv") %>% 
+  ggplot(aes(x=Prop_prod, Prop_neg))+geom_point(size=3.2, colour="dodgerblue4")+
+  theme_pubr()+
+  theme(text = element_text(size=9))+
+  geom_line(aes(y=predict(lm(Prop_neg~Prop_prod))), colour="grey", size=0.9)+
+  geom_text_repel(aes(x=Prop_prod, y=Prop_neg, label=State), point.padding = 0.2, force = 1, max.iter = 1000,size=3)+
+  labs(x="Prop. domestic aquaculture production", y="Prop. negative aquaculture sentiment")+
+  ggsave("Sentiment and production.tiff", device = "tiff", width = 9, height = 7, units = "cm")
+
+
+ggarrange(aus_aqua, aquaculture_sentiment, nimby,
+          nrow = 1, ncol=3,
+          labels = c("a", "b", "c"),
+          widths = c(1,1,0.75),
+          font.label = list(size=9))+
+  ggsave("Figure - perceptions and production.tiff", device = "tiff", dpi=600, width = 18, height=7, units = "cm")
+
+```
+
+
+
+```{r}
 (food_bal_australia <- 
    bind_rows(
      fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
@@ -195,7 +912,6 @@ exp((1.446e-05*10000))
 
 
 
-
   trends <- ggplot(food_bal_australia, aes(x=Year, y=Relative_value, colour=Item))+
   geom_line(size=0.6)+
   theme_pubr()+
@@ -214,24 +930,35 @@ exp((1.446e-05*10000))
 
 
 
-
+  (land_sea <- 
+    fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
+    filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+    filter(Area == c("Australia")) %>% 
+    filter(`Item Code`!= 2948) %>% 
+    filter(Item %in% c("Meat", "Fish, Seafood","Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables",  "Offals, Edible", "Vegetable Oils", "Sugar & Sweeteners")) %>% 
+    mutate(Item = case_when(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables")~"Crops",
+                            Item %in% c("Vegetable Oils") ~ "Oils, fats",
+                            TRUE ~ Item)) %>% 
+    group_by(Item, Year) %>% 
+    summarise(Value = sum(Value)) %>% 
+    ungroup() %>% 
+    group_by(Item) %>% 
+    nest() %>% 
+    mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
+    unnest()
+  )
+  
+  
+unique(land_sea$Item)
 
 
 ```
 
+
+
 #consumption, gdp and trends combined
 
 ```{r}
-ggarrange(consumption_gdp, trends,
-          labels=c("a", "b"),
-          nrow = 2,
-          ncol=1,
-          font.label = list(size=7), 
-          heights = c(1,0.9),
-          label.y = c(1,1.07))+
-  ggsave("Figure - consumption trends.tiff", device="tiff", dpi=600, width = 6, height = 9, units = "cm")+
-  ggsave("Figure - consumption trends.pdf", device="pdf", dpi=600, width = 6, height = 9, units = "cm")
-
 
 
 ```
@@ -500,90 +1227,6 @@ viridis(6)
 
 ```{r}
 
-fish_img <- readPNG("tuna1.png")
-fish_img <- rasterGrob(fish_img)
-
-(seafood <- 
-   bind_rows(
-     fisheries <- 
-       fread("fisheries_prod_raw.csv", header=TRUE) %>%
-       rename(Country = `Country (Country)`,
-              Species = `Species (ASFIS species)`,
-              Fishing_area = `Fishing area (FAO major fishing area)`,
-              Unit=`Unit (Unit)`) %>% 
-       gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
-       mutate(Year = as.numeric(Year)) %>% 
-       mutate(Value = case_when(Value=="0 0" ~ "0.2",
-                                Value=="-" ~ "NA",
-                                Value == "..." ~ "NA",
-                                Value ==" " ~ "NA",
-                                TRUE ~ Value)) %>% 
-       filter(Country=="Australia") %>%
-       filter(Unit == "Tonnes - live weight") %>% 
-       mutate(Value = gsub(" F", "", Value) %>% 
-                as.numeric()) %>% 
-       drop_na(Value) %>% 
-       filter(Year %in% c(1960:2017)) %>%
-       #filter(!Species %in% c("Salps", "Hard corals, madrepores nei" )) %>% 
-       group_by(Year) %>%
-       summarise(Value = sum(Value)) %>% 
-       mutate(Element="Fisheries landings"),
-     
-     aquaculture <- 
-       fread("aqua-prod-raw.csv", header=TRUE) %>%
-       rename(Country = `Country (Country)`,
-              Species = `Species (ASFIS species)`,
-              Farming_area = `Aquaculture area (FAO major fishing area)`,
-              Environment = `Environment (Environment)`) %>% 
-       gather(key="Year", value="Value", -c(Country, Species, Farming_area, Environment, Unit)) %>%
-       mutate(Year = as.numeric(Year)) %>% 
-       mutate(Value = case_when(Value=="0 0" ~ "0.2",
-                                Value=="-" ~ "NA",
-                                Value == "..." ~ "NA",
-                                Value ==" " ~ "NA",
-                                TRUE ~ Value)) %>% 
-       filter(Country=="Australia") %>%
-       #filter(Species =="Atlantic salmon") %>% 
-       #filter(!grepl("Inland waters", Farming_area)) %>% 
-       filter(Unit == "Tonnes - live weight") %>% 
-       mutate(Value = gsub(" F", "", Value) %>% 
-                as.numeric()) %>% 
-       filter(Year >1959) %>% 
-       drop_na() %>% 
-       group_by(Year) %>% 
-       summarise(Value=sum(Value)) %>% 
-       mutate(Element="Aquaculture\nproduction")
-   ) %>%
-   mutate(Element= factor(Element, levels=c("Fisheries landings", "Aquaculture\nproduction"))) %>%
-   group_by(Element) %>% 
-   nest() %>% 
-   mutate(GAM = purrr::map(data, ~(predict(gam(.$Value~s(.$Year)))))) %>% 
-   unnest() %>% 
-   mutate(GAM = case_when(Element=="Aquaculture\nproduction" ~ NA_real_,
-                          TRUE ~ GAM)) %>% 
-   ggplot(aes(x=Year, y=Value, colour=Element))+
-   geom_line()+
-   geom_line(aes(y=GAM, group=Element), colour="grey50", size=0.25)+
-   theme_pubr()+
-   theme(
-     text = element_text(size=6),
-     legend.background = element_rect(fill="transparent"),
-     legend.position = c(0.22,0.75),
-     legend.direction = "vertical",
-     legend.box.spacing = unit(0,"cm"),
-     legend.key.width = unit(0.4, "cm"),
-     legend.key.height = unit(0.1,"cm"),
-     legend.title = element_blank(),
-     legend.spacing = unit(-0.3, "cm")
-   )+
-   scale_color_manual(values=c("dodgerblue", "dodgerblue4")) + 
-   labs(y=bquote(Biomass~(thousand~tonnes)))+
-   scale_y_continuous(labels = c("0", "50","100","150", "200", "250"), breaks = c(0, 5e+4,10e+4,15e+4, 20e+4, 25e+4), limits = c(0,27.5e+4))+
-   scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
-   annotate("text", x=1967, y=27.5e+4, label="Fisheries/Seafood", hjust=0, size=2)+
-    annotation_custom(fish_img, xmin = 1958,xmax = 1967, ymin = 25.7e+4, ymax=29.1e+4)+
-   ggsave("Production_fish.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
-)
 
 
 ```
@@ -592,71 +1235,7 @@ fish_img <- rasterGrob(fish_img)
 #Supply and demand
 ```{r}
 
-(pop <- fread("Population.csv", header=TRUE) %>% 
-   rename(Country = `Country Name`) %>% 
-   select(-c(`Indicator Name`, `Indicator Code`, `Country Code`, V64)) %>%
-   mutate(iso_a3 = countrycode(Country, origin="country.name", destination="iso3c", warn=TRUE))%>% 
-   drop_na(iso_a3) %>% 
-   gather(key="Year", value="Population", -c(Country, iso_a3))%>% 
-   mutate_if(bit64::is.integer64, as.integer) %>% 
-   filter(Country=="Australia") %>% 
-   mutate(Year=as.integer(Year))
-)
 
-(seafood_demand_supply <- 
-    bind_rows(
-      aqua_fish_combo <- 
-        bind_cols(fisheries %>% 
-                    rename(Fisheries = Value), 
-                  aquaculture %>% 
-                    select(Value, Element) %>% 
-                    rename(Aquaculture=Value)
-        ) %>%   
-        mutate(Value=Fisheries+Aquaculture) %>% 
-        select(Year, Value) %>% 
-        mutate(Element = "Capture & farmed production"),
-      
-      fisheries %>% 
-        mutate(Element="Capture production only"),
-      
-      fish_consumption <- fread("FoodBalanceSheets_E_All_Data_(Normalized).csv", header = TRUE) %>% 
-        filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
-        filter(Area == c("Australia")) %>% 
-        filter(`Item Code`!= 2948) %>% 
-        filter(Item %in% c("Fish, Seafood")) %>% 
-        select(Year, Value) %>% 
-        rename(Supply=Value) %>% 
-        left_join(pop, by="Year") %>% 
-        mutate(Value = (Supply*Population)/1000) %>% 
-        select(Year, Value) %>% 
-        mutate(Element="Fish/Seafood consumption")
-    ) %>% 
-    mutate(Element = factor(Element, levels=c("Fish/Seafood consumption", "Capture & farmed production", "Capture production only"))) %>% 
-    ggplot(aes(Year, Value, colour=Element, linetype=Element))+
-    geom_line()+
-    theme_pubr()+
-    theme(
-      text = element_text(size=6),
-      legend.background = element_rect(fill="transparent"),
-      axis.title.y = element_blank(),
-      legend.position = c(0.32,0.9),
-      legend.direction = "vertical",
-      legend.box.spacing = unit(0,"cm"),
-      legend.key.width = unit(0.4, "cm"),
-      legend.key.height = unit(0.1,"cm"),
-      legend.title = element_blank(),
-      legend.spacing = unit(-0.3, "cm"),
-      plot.margin = unit(c(t=0.2, r=0.7, b=0.2, l=0.2), "cm")
-    )+
-    labs(y="Biomass (thousand tonnes)")+
-    scale_color_manual(values = c("firebrick" , "dodgerblue4","dodgerblue"))+
-    scale_linetype_manual(values=c(1,1,1))+
-    scale_y_continuous(labels = c("0", "200","400","600"), breaks = c(0, 2e+5,4e+5,6e+5), limits = c(0,6.1e+5))+
-    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
-    annotate("segment",x=2013, xend=2013, y=260e+3, yend=590e+3,  arrow=arrow(length = unit(1, "mm"), ends = "both", type = "open"), size=0.3, colour="grey50")+
-    annotate("text", x=2019, y=410e+3, label="354 217 \nMT",size=1.5)+
-    ggsave("Production_seafood.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
-)
 
 
 
@@ -679,162 +1258,6 @@ ggarrange(crops_plot, livestock, seafood, seafood_demand_supply,
 
 ```
 
-#EWS for fisheries
-```{r}
-window <- 0.5
-
-(fisheries <- 
-    fread("fisheries_prod_raw.csv", header=TRUE) %>%
-    rename(Country = `Country (Country)`,
-           Species = `Species (ASFIS species)`,
-           Fishing_area = `Fishing area (FAO major fishing area)`,
-           Unit=`Unit (Unit)`) %>% 
-    gather(key="Year", value="Value", -c(Country, Species, Fishing_area, Unit)) %>%
-    mutate(Year = as.numeric(Year)) %>% 
-    mutate(Value = case_when(Value=="0 0" ~ "0.2",
-                             Value=="-" ~ "NA",
-                             Value == "..." ~ "NA",
-                             Value ==" " ~ "NA",
-                             TRUE ~ Value)) %>% 
-    filter(Country=="Australia") %>%
-    filter(Unit == "Tonnes - live weight") %>% 
-    mutate(Value = gsub(" F", "", Value) %>% 
-             as.numeric()) %>% 
-    drop_na(Value) %>% 
-    # mutate(Value = case_when(is.na(Value)~0,
-    #                          TRUE ~ Value)) %>% 
-    # filter(!grepl("Inland waters", Fishing_area)) %>% 
-    # left_join(spp, by="Species") %>% 
-    # rename(Group = ISSCAAP_Group) %>%
-    # select(Year, Country, Group, Value) %>% 
-    group_by(Year) %>% 
-    summarise(Value=sum(Value)) %>%
-    mutate(Normalized_value = (Value - mean(Value))/sd(Value)) %>% 
-    mutate(Element="Fisheries") %>% 
-    mutate(Residuals = resid(gam(Value~s(Year)))) %>% 
-    mutate(Variance = rollapply(data = Residuals, 
-                                width = window*length(Residuals), 
-                                FUN = sd, 
-                                align = "right", 
-                                fill = NA, 
-                                na.rm = T)) %>% 
-    mutate(Mean = rollapply(data = Residuals, 
-                            width = window*length(Residuals), 
-                            FUN = mean, 
-                            align = "right", 
-                            fill = NA, 
-                            na.rm = T)) %>%
-    mutate(CV=Variance/Mean) %>%
-    mutate(AR1 = rollapply(data = Residuals, 
-                           width = window*length(Residuals), 
-                           FUN = function(z,  na.rm = FALSE){
-                             return(acf(z, plot=FALSE)$acf[2])
-                           },  
-                           align = "right", 
-                           fill = NA, 
-                           na.rm = T)) %>% 
-    mutate(Return_rate = rollapply(data=Residuals,
-                                   width= window*length(Residuals),
-                                   FUN = function(z, na.rm=FALSE){
-                                     ar1 <- ar.ols(z,demean=FALSE, order.max = 1, aic = FALSE, intercept = FALSE)
-                                     return(return_rate = 1/ar1$ar[1])
-                                   },
-                                   align = "right", 
-                                   fill = NA, 
-                                   na.rm = T)) %>% 
-    mutate(Kurtosis = rollapply(data=Residuals,
-                                   width=window*length(Residuals),
-                                   FUN = moments::kurtosis,
-                                   align = "right", 
-                                   fill = NA, 
-                                   na.rm = T)) %>% 
-    mutate(Skewness = rollapply(data=Residuals,
-                                   width=0.5*length(Residuals),
-                                   FUN = moments::skewness,
-                                   align = "right", 
-                                   fill = NA, 
-                                   na.rm = T))
-)
-
-
-#fishing boat png 
-
-fishing_img <- readPNG("fishingboat.png")
-fishing_img <- rasterGrob(fishing_img)
-
-
-
-(landings <- ggplot(fisheries,
-       aes(x=Year)) +
-  geom_line(aes(y=Value), colour="#440154FF")+
-  geom_line(aes(y=predict(gam(Value~s(Year)))), size=0.5, colour="grey50")+
-    theme_pubr()+
-    theme(
-      text = element_text(size=6),
-      axis.title.x = element_blank()
-      #plot.margin = unit(c(t=0.5, r=0.1,b=0.1,l=0.1), "cm")
-      
-      
-    )+
-    scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.7e+5))+
-    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
-    labs(y=bquote(Fisheries~landings~(Tx10^3)))+
-    annotation_custom(fishing_img, xmin = 1950, 1960, ymin = 1.9e+5, ymax=2.9e+5)+
-    annotate("text", x=1960, y=2.4e+5,label="Fisheries\nlandings", hjust=0, size=1.8)+
-    ggsave("EWS_landings.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
-
-)
-
-
-(Variance <- ggplot(fisheries,
-       aes(x=Year)) +
-  geom_line(aes(y=Variance), colour="#440154FF")+
-    theme_pubr()+
-    theme(
-      text = element_text(size=6),
-      axis.title.x = element_blank()
-    )+
-    scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
-    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
-    labs(y="Variance")+
-    annotate("segment", x=1950, xend=1982, y=8e+3, yend=8e+3, lineend = "butt", arrow=arrow(length = unit(1.5, "mm"), ends = "both", type = "open"))+
-    annotate("text", x=1966, y=8.7e+3, label="Rolling window", size=1.8)+
-    ggsave("EWS_variance.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
-
-)
-
-(AR1 <- ggplot(fisheries,
-       aes(x=Year)) +
-  geom_line(aes(y=AR1), colour="#440154FF")+
-    theme_pubr()+
-    theme(
-      text = element_text(size=6)
-    )+
-    #scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.55e+5))+
-    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
-    labs(y="AR1", x="Year")+
-    annotate("segment", x=1950, xend=1982, y=0.05, yend=0.05, lineend = "butt", arrow=arrow(length = unit(1.5, "mm"), ends = "both", type = "open"))+
-    annotate("text", x=1966, y=0.1, label="Rolling window", size=1.8)+
-    ggsave("EWS_AR1.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
-
-
-)
-
-length(fisheries$Residuals)*window
-
-
-ggarrange(landings, Variance, AR1, 
-         nrow=3, ncol=1,
-         heights = c(1.6,1,1.15),
-         labels = c("A", "B", "C"),
-         font.label = list(size=7),
-         label.y = c(1, 1, 1),
-         align = "v")+
-  ggsave("Figure - EWS.tiff", device = "tiff", dpi=600, width = 5.5, height = 9, units = "cm")+
-  ggsave("Figure - EWS.pdf", device = "pdf", dpi=600, width = 5.5, height = 9, units = "cm")
-
-
-```
 
 
 #Breakdown of australian aquaculture
@@ -901,7 +1324,7 @@ fread("aqua-prod-raw.csv", header=TRUE) %>%
     legend.title = element_blank(),
     legend.background = element_rect(fill = "transparent")
   )+
-  scale_fill_manual(values=viridis(10))+
+  scale_fill_manual(values=brewer.pal(n=10, name = "Spectral"))+
   labs(y="Biomass (thousand tonnes)")+
   scale_y_continuous(breaks=c(0,25000, 50000, 75000, 100000), labels=c("0", "25", "50", "75", "100"))+
   guides(fill = guide_legend(byrow = TRUE, nrow = 5, ncol=2))+
