@@ -25,6 +25,9 @@ library(ggrepel)
 library(viridis)
 library(boot)
 library(Kendall)
+library(tseries)
+library(lmtest)
+library(LaCroixColoR)
 ```
 
 #Plot of consumption versus GDP
@@ -137,11 +140,11 @@ consumption_gdp <-
     legend.background = element_rect(fill="transparent"),
     plot.margin = unit(c(t=0.5, r=0.1, b=0.1, l=0.1), "cm")
   )+
-  labs(y=bquote(Meat~consumption~(kg~capita^-1~yr^-1)), x=bquote(GDP~capita^-1~(USD~2010~equivalents)))+
+  labs(y=bquote(Animal-based~food~consumption~(kg~capita^-1~yr^-1)), x=bquote(GDP~capita^-1~(USD~2010~equivalents)))+
   scale_x_log10(breaks = c(1000, 10000, 100000), labels=c("1000", "10000", "100000"))+
   #scale_color_gradient2(low = "black", mid="lightblue", midpoint = 0.12, high="dodgerblue")+
   geom_line(aes(y=predict(glm(Value~log10(GDP_per_cap), family="quasipoisson"), type="response"))) + 
-   geom_text_repel(data=labels, mapping = aes(x=GDP_per_cap, y=Value, label=Area), force=0.9, segment.color = "grey50", point.padding = 0.1,, size=1.5)+
+   geom_text_repel(data=labels, mapping = aes(x=GDP_per_cap, y=Value, label=Area), force=0.9, segment.color = "grey80", point.padding = NA, size=1.5)+
   #annotate("segment", x=6e+4, xend = 5e+4, y=128, yend = 136, colour="grey50")+
   #guides(colour = guide_colorbar(barwidth = 0.3, barheight = 3, units="cm", ticks = FALSE, title = "Prop. of total food\nsupply from seafood", title.position = "top", title.hjust = 0))+
   
@@ -218,7 +221,7 @@ consumption_items <- ggplot(food_bal_australia %>%
     legend.key.height = unit(0.2, "cm"),
     text = element_text(size=9)
   )+
-  labs(y="Relative consumption")+
+  labs(y=bquote(Relative~consumption~capiata^-1))+
   ggsave("Figure 1a - relative consumption.tiff", dpi=600, device = "tiff", width=9, height=7, units="cm")
 
 
@@ -506,18 +509,18 @@ fish_img <- rasterGrob(fish_img)
     geom_line(size=0.9)+
     theme_pubr()+
     theme(
-      text = element_text(size=9),
+      text = element_text(size=12),
       legend.background = element_rect(fill="transparent"),
       #axis.title.y = element_blank(),
-      legend.position = c(0.3,0.9),
+      legend.position = c(0.38,0.9),
       legend.direction = "vertical",
       legend.box.spacing = unit(0,"cm"),
       #legend.key.width = unit(0.4, "cm"),
       legend.key.height = unit(0.3,"cm"),
       legend.title = element_blank(),
-      legend.text = element_text(size=7),
+      legend.text = element_text(size=12),
       legend.spacing = unit(-0.3, "cm"),
-      plot.margin = unit(c(t=0.5, r=4.5, b=0.5, l=4.5), "cm")
+      #plot.margin = unit(c(t=0.5, r=4.5, b=0.5, l=4.5), "cm")
     )+
     labs(y="Seafood biomass (1000s tonnes)")+
     scale_color_manual(values = c("black", "grey60", "dodgerblue3", "dodgerblue"))+
@@ -525,8 +528,9 @@ fish_img <- rasterGrob(fish_img)
     scale_y_continuous(labels = c("0", "200","400","600"), breaks = c(0, 2e+5,4e+5,6e+5), limits = c(0,6.1e+5))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
     annotate("segment",x=2013, xend=2013, y=260e+3, yend=590e+3,  arrow=arrow(length = unit(1.5, "mm"),  ends = "both", type = "open"), size=0.45, colour="grey50")+
-    annotate("text", x=2019, y=410e+3, label="354 217 \nMT",size=2)+
-    ggsave("Production_seafood.tiff", dpi=600, device = "tiff", width=18, height = 7, units = "cm")
+    annotate("text", x=2019, y=410e+3, label="354 217 \nMT",size=3)+
+    ggsave("Production_seafood.tiff", dpi=600, device = "tiff", width=18, height = 7, units = "cm")+
+    ggsave("Production_seafood.pdf", dpi=600, device = "pdf", width=12, height = 9, units = "cm")
 )
 
 
@@ -557,9 +561,11 @@ ggarrange(ggarrange(consumption_items, prop_seafood,
 
 #EWS for fisheries
 ```{r}
-window <- 0.5
+window <- c(0.3, 0.4,0.5, 0.6,0.7)
 
-(fisheries <- 
+for(i in window){
+  
+  assign(paste0("window", i), 
     fread("fisheries_prod_raw.csv", header=TRUE) %>%
     rename(Country = `Country (Country)`,
            Species = `Species (ASFIS species)`,
@@ -586,31 +592,33 @@ window <- 0.5
     group_by(Year) %>% 
     summarise(Value=sum(Value)) %>%
     mutate(Normalized_value = (Value - mean(Value))/sd(Value)) %>% 
-    mutate(Element="Fisheries") %>% 
-    mutate(Residuals = resid(gam(Value~s(Year)))) %>% 
-    mutate(Variance = rollapply(data = Residuals, 
-                                width = window*length(Residuals), 
+    mutate(log_Value = log10(Value)) %>% 
+    #mutate(Element="Fisheries") %>% 
+    #mutate(Residuals = (resid(gam(Value~s(Year))))) %>% diag(1:4)
+    mutate(Differenced = c(0, diff(Value))) %>% 
+    mutate(Variance = rollapply(data = Differenced, 
+                                width = i*length(Differenced), 
                                 FUN = sd, 
                                 align = "right", 
                                 fill = NA, 
                                 na.rm = T)) %>% 
-    mutate(Mean = rollapply(data = Residuals, 
-                            width = window*length(Residuals), 
+    mutate(Mean = rollapply(data = Differenced, 
+                            width = i*length(Differenced), 
                             FUN = mean, 
                             align = "right", 
                             fill = NA, 
                             na.rm = T)) %>%
     mutate(CV=Variance/Mean) %>%
-    mutate(AR1 = rollapply(data = Residuals, 
-                           width = window*length(Residuals), 
+    mutate(AR1 = rollapply(data = (Differenced), 
+                           width = i*length(Differenced), 
                            FUN = function(z,  na.rm = FALSE){
                              return(acf(z, plot=FALSE)$acf[2])
                            },  
                            align = "right", 
                            fill = NA, 
                            na.rm = T)) %>% 
-    mutate(Return_rate = rollapply(data=Residuals,
-                                   width= window*length(Residuals),
+    mutate(Return_rate = rollapply(data=Differenced,
+                                   width= i*length(Differenced),
                                    FUN = function(z, na.rm=FALSE){
                                      ar1 <- ar.ols(z,demean=FALSE, order.max = 1, aic = FALSE, intercept = FALSE)
                                      return(return_rate = 1/ar1$ar[1])
@@ -618,19 +626,33 @@ window <- 0.5
                                    align = "right", 
                                    fill = NA, 
                                    na.rm = T)) %>% 
-    mutate(Kurtosis = rollapply(data=Residuals,
-                                   width=window*length(Residuals),
+    mutate(Kurtosis = rollapply(data=Differenced,
+                                   width=i*length(Differenced),
                                    FUN = moments::kurtosis,
                                    align = "right", 
                                    fill = NA, 
                                    na.rm = T)) %>% 
-    mutate(Skewness = rollapply(data=Residuals,
-                                   width=0.5*length(Residuals),
+    mutate(Skewness = rollapply(data=Differenced,
+                                   width=i*length(Differenced),
                                    FUN = moments::skewness,
                                    align = "right", 
                                    fill = NA, 
-                                   na.rm = T))
-)
+                                   na.rm = T)) %>% 
+    mutate(Width = i)%>% 
+    
+    mutate(Diff_AR1= rollapply(data = Differenced, 
+                           width =i* length(Differenced), 
+                           FUN = function(z,  na.rm = FALSE){
+                             return(acf(z, plot=FALSE)$acf[2])
+                           },  
+                           align = "right", 
+                           fill = NA, 
+                           na.rm = T)))
+  
+}
+
+fisheries <- bind_rows(window0.3, window0.4, window0.5, window0.6,window0.7)
+
 
 
 #fishing boat png 
@@ -640,10 +662,10 @@ fishing_img <- rasterGrob(fishing_img)
 
 
 
-(landings <- ggplot(fisheries,
+(landings <- ggplot(fisheries %>% filter(Width ==0.5),
        aes(x=Year)) +
-  geom_line(aes(y=Value), colour="#3288BD", size=1.1)+
-  geom_line(aes(y=predict(gam(Value~s(Year)))), size=0.6, colour="grey60")+
+  geom_line(aes(y=Value), colour="#172869", size=1.1)+
+ #geom_line(aes(y=predict(gam(Value~s(Year)))), size=0.6, colour="grey60")+
     theme_pubr()+
     theme(
       text = element_text(size=9),
@@ -652,106 +674,220 @@ fishing_img <- rasterGrob(fishing_img)
       
       
     )+
-    geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
+    geom_vline(xintercept = 2007, linetype=2, colour="grey80", size=0.75)+
     scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.7e+5))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
-    labs(y=bquote(Fisheries~landings~(Tx10^3)))+
+    labs(y=bquote(Tonnes~(10^3)))+
     #annotation_custom(fishing_img, xmin = 1950, 1960, ymin = 1.9e+5, ymax=2.9e+5)+
-    #annotate("text", x=1960, y=2.4e+5,label="Fisheries\nlandings", hjust=0, size=1.8)+
+    annotate("text", x=1951, y=2.7e+5,label="Fisheries landings", hjust=0, size=2.9)+
     ggsave("EWS_landings.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
 
 )
 
 
-variance_ts <- fisheries$Variance[!is.na(fisheries$Variance)]
-
-(variance_tau <- Kendall(1:length(variance_ts), variance_ts)$tau[1])
-
-tau.fc<-function(x,y){
-   y<-sample(x, replace = T)
-  tau<-as.numeric(Kendall(1:length(y), y)$tau)
-  return(tau)
-}
-
-boot_mod <- boot(data=variance_ts, statistic=tau.fc,  R=1000)
-hist(boot$t, xlim = c(-1, 1))
-abline(v=variance_tau, lty=2, col="red")
-length(which(boot$t>variance_tau))/1000
-
-
-
-
-
-(Variance <- ggplot(fisheries,
+(residuals <- ggplot(fisheries %>% filter(Width ==0.5),
        aes(x=Year)) +
-  geom_line(aes(y=Variance), colour="black", size=0.9)+
+  geom_line(aes(y=Differenced), colour="#EA7580", size=1.1)+
+  # geom_line(aes(y=Mean), colour="#EA7580", size=1.1)+
+  #geom_line(aes(y=predict(gam(Value~s(Year)))), size=0.6, colour="grey60")+
     theme_pubr()+
     theme(
       text = element_text(size=9),
       axis.title.x = element_blank()
+      #plot.margin = unit(c(t=0.5, r=0.1,b=0.1,l=0.1), "cm")
+      
+      
     )+
-    geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
-    scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
+    geom_hline(yintercept = 0, linetype=1, colour="grey90", size=0.75)+
+    geom_vline(xintercept = 2007, linetype=2, colour="grey80", size=0.75)+
+    #scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.7e+5))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
-    labs(y=bquote(Variance~(Tx10^3)))+
-    annotate("segment", x=1950, xend=1982, y=8e+3, yend=8e+3, size=0.7, lineend = "butt", arrow=arrow(length = unit(1.8, "mm"), ends = "both", type = "open"))+
-    annotate("text", x=1966, y=9e+3, label="Rolling window", size=3)+
-    geom_text(x=1966, y=15e+3, label="tau~'= 0.815, p=0'", parse=TRUE, size=3)+
-    ggsave("EWS_variance.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+    labs(y=bquote(Tonnes~(10^3)))+
+    #annotation_custom(fishing_img, xmin = 1950, 1960, ymin = 1.9e+5, ymax=2.9e+5)+
+   annotate("text", x=1951, y=39e+3,label="First-difference detrended", hjust=0, size=2.9)+
+    ggsave("EWS_differenced_landings.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
 
 )
 
 
-(AR1_ts <- fisheries$AR1[!is.na(fisheries$AR1)])
-
-(AR1_tau <- Kendall(1:length(AR1_ts), AR1_ts)$tau[1])
-
-
-boot_mod <- boot(data=AR1_ts, statistic=tau.fc,  R=1000)
-hist(boot$t, xlim = c(-1, 1))
-abline(v=AR1_tau, lty=2, col="red")
-length(which(boot$t>AR1_tau))/1000
+(landings_residuals <- ggarrange(landings, residuals, 
+          labels = c("a", "b"),
+          font.label = list(size=9),
+          ncol = 2,
+          nrow = 1))
 
 
 
+# variance_ts <- fisheries$Variance[!is.na(fisheries$Variance)]
+# 
+# (variance_tau <- Kendall(1:length(variance_ts), variance_ts)$tau[1])
+# 
+# tau.fc<-function(x,y){
+#    y<-sample(x, replace = T)
+#   tau<-as.numeric(Kendall(1:length(y), y)$tau)
+#   return(tau)
+# }
+# 
+# boot_mod <- boot(data=variance_ts, statistic=tau.fc,  R=1000)
+# hist(boot_mod$t, xlim = c(-1, 1))
+# abline(v=variance_tau, lty=2, col="red")
+# length(which(boot$t>variance_tau))/1000
+# 
 
-(AR1 <- ggplot(fisheries,
-       aes(x=Year)) +
-  geom_line(aes(y=AR1), colour="black", size=0.9)+
+
+
+
+# (Variance <- ggplot(fisheries %>% filter(Width==0.5),
+#        aes(x=Year)) +
+#   geom_line(aes(y=Variance), colour="black", size=0.9)+
+#     theme_pubr()+
+#     theme(
+#       text = element_text(size=9),
+#       axis.title.x = element_blank()
+#     )+
+#     geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
+#     scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
+#     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+#     labs(y=bquote(Variance~(Tx10^3)))+
+#     annotate("segment", x=1950, xend=1982, y=8e+3, yend=8e+3, size=0.7, lineend = "butt", arrow=arrow(length = unit(1.8, "mm"), ends = "both", type = "open"))+
+#     annotate("text", x=1966, y=9e+3, label="Rolling window", size=3)+
+#     #geom_text(x=1966, y=15e+3, label="tau~'= 0.815, p=0'", parse=TRUE, size=3)+
+#     ggsave("EWS_variance.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+# 
+# )
+# 
+# 
+# (AR1_ts <- fisheries$AR1[!is.na(fisheries$AR1)])
+# 
+# (AR1_tau <- Kendall(1:length(AR1_ts), AR1_ts)$tau[1])
+# 
+# 
+# boot_mod <- boot(data=AR1_ts, statistic=tau.fc,  R=1000)
+# hist(boot_mod$t, xlim = c(-1, 1))
+# abline(v=AR1_tau, lty=2, col="red")
+# length(which(boot_mod$t>AR1_tau))/1000
+# 
+# 
+# 
+# 
+# (AR1 <- ggplot(fisheries %>% filter(Width==0.5),
+#        aes(x=Year)) +
+#   geom_line(aes(y=AR1), colour="black", size=0.9)+
+#     theme_pubr()+
+#     geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
+#     theme(
+#       text = element_text(size=9)
+#     )+
+#     #scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.55e+5))+
+#     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+#     labs(y="AR1", x="Year")+
+#     annotate("segment", x=1950, xend=1982, y=0.05, yend=0.05, size=0.7, lineend = "butt", arrow=arrow(length = unit(1.8, "mm"), ends = "both", type = "open"))+
+#     annotate("text", x=1966, y=0.1, label="Rolling window", size=3)+
+#     #annotate("text", x=1966, y=0.4, label="tau~'= 0.778, p=0'",, parse=TRUE, size=3)+
+#     ggsave("EWS_AR1.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+# 
+# 
+# )
+# 
+# length(fisheries$Residuals)*window
+# 
+# 
+# ggarrange(landings, Variance, AR1, 
+#          nrow=3, ncol=1,
+#          heights = c(1.6,1,1.15),
+#          labels = c("a", "b", "c"),
+#          font.label = list(size=9),
+#          label.y = c(1, 1.1, 1),
+#          align = "v")+
+#   ggsave("Figure - EWS.tiff", device = "tiff", dpi=600, width = 9, height = 13, units = "cm")+
+#   ggsave("Figure - EWS.pdf", device = "pdf", dpi=600, width = 9, height = 13, units = "cm")
+# 
+
+
+#reliability investigation into trend test
+
+  vars <- ggplot(data=fisheries, aes(x=Year, y=Variance))+
+    geom_line()+
+    facet_grid(.~Width)+
     theme_pubr()+
-    geom_vline(xintercept = 2005, linetype=2, colour="grey80", size=0.75)+
-    theme(
-      text = element_text(size=9)
-    )+
-    #scale_y_continuous(breaks = c(0 ,0.5e+5, 1e+5, 1.5e+5,2e+5, 2.5e+5), labels=c("0", "50", "100", "150", "200", "250"), limits = c(0, 2.55e+5))+
-    scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
-    labs(y="AR1", x="Year")+
-    annotate("segment", x=1950, xend=1982, y=0.05, yend=0.05, size=0.7, lineend = "butt", arrow=arrow(length = unit(1.8, "mm"), ends = "both", type = "open"))+
-    annotate("text", x=1966, y=0.1, label="Rolling window", size=3)+
-    annotate("text", x=1966, y=0.4, label="tau~'= 0.778, p=0'",, parse=TRUE, size=3)+
-    ggsave("EWS_AR1.tiff", dpi=600, device="tiff", width = 5.5, height=4, units = "cm")
+      theme(
+        text = element_text(size=9),
+        axis.title.x = element_blank()
+      )+
+      geom_vline(xintercept = 2007, linetype=2, colour="grey80", size=0.75)+
+      scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
+      scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+      labs(y=bquote(Variance~(Tx10^3)))
+    
+  
+  ar1 <- ggplot(data=fisheries, aes(x=Year, y=AR1))+
+    geom_line()+
+    facet_grid(.~Width)+
+    theme_pubr()+
+      theme(
+        text = element_text(size=9),
+        axis.title.x = element_blank()
+      )+
+      geom_vline(xintercept = 2007, linetype=2, colour="grey80", size=0.75)+
+      #scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
+      scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+      labs(y="AR1", x="Year")
+  
+  
+  
+  comp_fisheries <- fisheries %>% 
+    drop_na() %>% 
+    group_by(Width) %>% 
+    nest() %>% 
+    mutate(Normalised_variance = map(data, ~((.$Variance-mean(.$Variance))/sd(.$Variance))),
+           Normalised_AR = map(data, ~((.$AR1-mean(.$AR1))/sd(.$AR1)))) %>% 
+    unnest() %>% 
+    mutate(Composite_index = Normalised_variance+Normalised_AR)
+  
+  
+   comp_index <- ggplot(data=comp_fisheries, aes(x=Year, y=Composite_index))+
+    geom_line()+
+    facet_grid(.~Width)+
+    theme_pubr()+
+      theme(
+        text = element_text(size=9),
+        axis.title.x = element_blank()
+      )+
+      geom_vline(xintercept = 2007, linetype=2, colour="grey80", size=0.75)+
+      #scale_y_continuous(breaks = c(8e+3 ,10e+3, 12e+3, 14e+3,16e+3), labels=c("8", "10", "12", "14", "16"))+
+      scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1950,2020))+
+      labs(y=bquote(Composite~index))
+   
+   
+   ggarrange(landings_residuals, vars,ar1, comp_index, 
+           nrow=4, ncol=1,
+           labels = c("", "c", "d", "e"),
+           font.label = list(size=9),
+           heights = c(1,0.75,0.75,0.75))+
+    ggsave("Figure - EWS_window_sensitivity.tiff", device = "tiff", dpi=600, width = 18, height = 18, units = "cm")+
+    ggsave("Figure - EWS_window_sensitivity.pdf", device = "pdf", dpi=600, width = 18, height = 18, units = "cm")
 
 
-)
+st_dev <- sd((fisheries %>% filter(Width==0.5))$Differenced)
+ 
 
-length(fisheries$Residuals)*window
+bds.test((fisheries %>% filter(Width==0.5))$Differenced, eps = c(0.5*st_dev, 0.75*st_dev, 1*st_dev))
 
-
-ggarrange(landings, Variance, AR1, 
-         nrow=3, ncol=1,
-         heights = c(1.6,1,1.15),
-         labels = c("a", "b", "c"),
-         font.label = list(size=9),
-         label.y = c(1, 1.1, 1),
-         align = "v")+
-  ggsave("Figure - EWS.tiff", device = "tiff", dpi=600, width = 9, height = 13, units = "cm")+
-  ggsave("Figure - EWS.pdf", device = "pdf", dpi=600, width = 9, height = 13, units = "cm")
+tiff("Acf_differenced.tiff", width = 14, height = 10, units = "cm", res = 300)
+pacf((fisheries %>% filter(Width==0.5))$Differenced, main="")
+dev.off()
 
 
 
+fisheries_test <- fisheries %>% filter(Width==0.5)
+qqnorm((fisheries_test$Differenced[2:68]))
+qqline(fisheries_test$Differenced[2:68])
 
 
 
+27333.72/13666.86
+
+20500.29/13666.86
 ```
 
 
@@ -1148,7 +1284,7 @@ crop_img <- rasterGrob(crop_img)
     geom_line(aes(y=predict(gam(Value~s(Year)))), colour="grey50", size=0.25)+
     theme_pubr()+
     theme(
-      text=element_text(size=6),
+      text=element_text(size=8),
       legend.background = element_rect(fill="transparent"),
       legend.position = c(0.18,0.8),
       legend.direction = "vertical",
@@ -1162,12 +1298,13 @@ crop_img <- rasterGrob(crop_img)
     scale_colour_manual(values ="goldenrod")+ #"#DCE318FF"
     scale_y_continuous(labels = c(40,60,80,100), breaks = c(4e+7,6e+7,8e+7, 10e+7), limits = c(2.5e+7,11e+7))+
     scale_x_continuous(breaks=c(1960,1980,2000,2020), labels = c("1960","1980","2000","2020"), limits = c(1960,2020))+
-    annotate("text", x=1967, y=11e+7, label="Crops", hjust=0, size=2)+
-    annotation_custom(crop_img, xmin = 1958,xmax = 1966, ymin = 10.7e+7, ymax=11.3e+7)+
+    #annotate("text", x=1967, y=11e+7, label="Crops", hjust=0, size=2)+
+    #annotation_custom(crop_img, xmin = 1958,xmax = 1966, ymin = 10.7e+7, ymax=11.3e+7)+
     ggsave("Production_crops.tiff", dpi=600, device = "tiff", width=5.5, height = 4, units = "cm")
 
 )
 
+window=0.5
 
 (si_crops_plot_a <- 
   crops %>% 
@@ -1228,18 +1365,23 @@ top_crops <- crops %>% drop_na(Value) %>%  filter(Year==2017) %>% arrange(-Value
 )
 
 
-
-ggarrange(si_crops_plot_a,
+ggarrange(crops_plot,
+          ggarrange(si_crops_plot_a,
           si_crops_plot_b,
-          labels = c("A", "B"),
+          labels = c("b", "c"),
           nrow = 1,
           ncol = 2,
           widths = c(1,1.4),
+          font.label = list(size=7)),
+          nrow = 2, 
+          ncol=1,
+          labels = c("a", ""),
+          heights = c(1,0.8),
           font.label = list(size=7))+
-  ggsave("Figure - SI crops.tiff", device="tiff", dpi=600, width=12, height=5, units = "cm")
+  ggsave("Figure - SI crops.tiff", device="tiff", dpi=600, width=12, height=12, units = "cm")
 
 
-unique(crops$Item)
+  unique(crops$Item)
 ```
 
 #livestock industry
