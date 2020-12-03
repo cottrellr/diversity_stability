@@ -27,6 +27,7 @@ library(boot)
 library(Kendall)
 library(tseries)
 library(lmtest)
+library(vroom)
 library(LaCroixColoR)
 ```
 
@@ -215,14 +216,15 @@ consumption_items <- ggplot(food_bal_australia %>%
   theme_pubr()+
   scale_x_continuous(limits=c(1960,2020))+
   theme(
-    legend.position = c(0.2,0.8),
+    legend.position = c(0.25,0.8),
     legend.title = element_blank(),
-    legend.text = element_text(size=7),
+    legend.text = element_text(size=11),
     legend.key.height = unit(0.2, "cm"),
-    text = element_text(size=9)
+    text = element_text(size=12)
   )+
-  labs(y=bquote(Relative~consumption~capiata^-1))+
-  ggsave("Figure 1a - relative consumption.tiff", dpi=600, device = "tiff", width=9, height=7, units="cm")
+  labs(y=bquote(Relative~consumption~capita^-1))+
+  ggsave("Figure 1a - relative consumption.tiff", dpi=600, device = "tiff", width=12, height=9, units="cm")+
+  ggsave("Figure 1a - relative consumption.pdf", dpi=600, device = "pdf", width=12, height=9, units="cm")
 
 
 
@@ -555,6 +557,74 @@ ggarrange(ggarrange(consumption_items, prop_seafood,
 
 
 
+```
+
+#Julia's global supply plot
+```{r}
+
+(food_bal_world <- 
+   bind_rows(
+     vroom("FoodBalanceSheets_E_All_Data_(Normalized).csv") %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("World")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c("Meat", "Fish, Seafood", "Cereals - Excluding Beer", "Milk - Excluding Butter", "Eggs", "Fruits - Excluding Wine", "Pulses", "Vegetables", "Starchy Roots")) %>% 
+       mutate(Item = case_when(Item == "Cereals - Excluding Beer" ~ "Cereals", 
+                               Item == "Milk - Excluding Butter" ~ "Milk", 
+                               Item %in% c("Fruits - Excluding Wine", "Pulses", "Vegetables", "Starchy Roots")~ "Fruit, Vegetables", 
+                               TRUE ~ Item)) %>% 
+       group_by(Item, Year) %>%
+       summarise(Value=sum(Value)) %>% 
+       ungroup() %>% 
+       group_by(Item) %>% 
+       nest() %>% 
+       mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
+       unnest(),
+     
+     vroom("FoodBalanceSheets_E_All_Data_(Normalized).csv") %>% 
+       filter(Element %in% c("Food supply quantity (kg/capita/yr)")) %>% 
+       filter(Area == c("World")) %>% 
+       filter(`Item Code`!= 2948) %>% 
+       filter(Item %in% c("Cereals - Excluding Beer", "Fruits - Excluding Wine", "Pulses", "Vegetables","Vegetable Oils", "Spices", "Starchy Roots" , "Aquatic Plants",  "Offals, Edible", "Meat", "Fish, Seafood", "Milk - Excluding Butter", "Eggs", "Miscellaneous")) %>% 
+       mutate(Item="Total food") %>% 
+       drop_na(Value) %>% 
+       group_by(Year, Item) %>% 
+       summarise(Value=sum(Value)) %>% 
+       ungroup() %>% 
+       group_by(Item) %>% 
+       nest() %>% 
+       mutate(Relative_value = map(data, ~(.$Value/.$Value[1]))) %>% 
+       unnest()
+     
+     
+   )
+)
+
+
+
+(consumption_item_global <- ggplot(food_bal_world %>% 
+         mutate(Item = factor(Item, levels=c("Fish, Seafood", "Fruit, Vegetables",  "Meat", "Milk", "Cereals", "Eggs", "Total food"))), aes(x=Year, y=Relative_value, colour=Item))+
+  geom_line(size=0.9)+
+  scale_color_manual(values = rev(c("#D53E4F", "#FC8D59" ,"#FEE08B", "goldenrod", "#E6F598", "#99D594", "#3288BD")))+
+  theme_pubr()+
+  scale_x_continuous(limits=c(1960,2020))+
+  scale_y_continuous(limits = c(0.95,2.25), breaks=seq(1, 2.25, by=0.25), labels = seq(1, 2.25, by=0.25))+
+  theme(
+    legend.position = c(0.25,0.8),
+    legend.title = element_blank(),
+    legend.text = element_text(size=11),
+    legend.key.height = unit(0.2, "cm"),
+    text = element_text(size=12)
+  )+
+  labs(y=bquote(Relative~consumption~capita^-1))+
+  ggsave("Figure  - relative consumption global.tiff", dpi=600, device = "tiff", width=12, height=9, units="cm")+
+  ggsave("Figure  - relative consumption global.pdf", dpi=600, device = "pdf", width=12, height=9, units="cm")
+)
+
+
+foodbal <- vroom("FoodBalanceSheets_E_All_Data_(Normalized).csv")
+
+unique(foodbal$Area)
 ```
 
 
